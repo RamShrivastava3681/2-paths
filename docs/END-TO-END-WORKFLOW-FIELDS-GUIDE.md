@@ -1,4 +1,4 @@
-# Adventra Platform — End-to-End Workflow Document
+# Two Paths Platform — End-to-End Workflow Document
 ### Product → Supplier → Purchase Order → Purchase Proforma → Purchase Invoice → GRN → Customer → Sales Order → Sales Proforma → Sales Invoice → IRN → Dispatch → E-Way Bill → Warehouse → Finance
 
 > Source: extracted from live implementation (`backend/src/models/*` + `frontend/src/routes/app.*.tsx` + `COMPLETE-WORKFLOW-GUIDE.md`).
@@ -535,4 +535,4 @@ Sections: `Location-wise Stock Breakdown [Show/Hide]` (per `StockLocation`: Cent
 14. [ ] Warehouse signed off (SO approve/reserve, pick→pack→awaiting_pick→dispatched→in_transit→delivered, manual movements as needed, location-wise balances verified)
 15. [ ] Finance closed (payments recorded both sides, advances adjusted, journals posted, reminders/NOA done, audit history intact, forecast recomputed)
 
-*Generated 2026-10-15 from Adventra codebase. Keep this file as the single field-level contract for re-implementation.*
+*Generated 2026-10-15 from Two Paths codebase. Keep this file as the single field-level contract for re-implementation.*

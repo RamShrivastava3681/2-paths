@@ -1,6 +1,6 @@
-# 🎤 Adventra — Live Demo Speech
+# 🎤 Two Paths — Live Demo Speech
 
-> **What this is:** a word-for-word script you can deliver while demoing Adventra to clients, investors, or your own team. It covers **every role**, **every tab**, and the **entire demand-forecasting engine** — every formula, in plain language with real numbers. Read it straight through (~10 minutes) or use the appendix cheat sheet for a live walkthrough.
+> **What this is:** a word-for-word script you can deliver while demoing Two Paths to clients, investors, or your own team. It covers **every role**, **every tab**, and the **entire demand-forecasting engine** — every formula, in plain language with real numbers. Read it straight through (~10 minutes) or use the appendix cheat sheet for a live walkthrough.
 
 **How to use this script**
 
@@ -11,11 +11,11 @@
 
 ---
 
-## Part 1 — Opening: what Adventra is
+## Part 1 — Opening: what Two Paths is
 
-> **"Good morning everyone. I'm going to show you Adventra — a receivables-factoring and debtor-monitoring platform that turns outstanding invoices into working capital, without losing sight of risk."**
+> **"Good morning everyone. I'm going to show you Two Paths — a receivables-factoring and debtor-monitoring platform that turns outstanding invoices into working capital, without losing sight of risk."**
 
-**"Let me set the scene. A trading company lives on its cash flow. Every day it ships goods, raises invoices, and waits — sometimes 30, 60, even 90 days — to get paid. That waiting is money sitting still. Adventra does three things about it:**
+**"Let me set the scene. A trading company lives on its cash flow. Every day it ships goods, raises invoices, and waits — sometimes 30, 60, even 90 days — to get paid. That waiting is money sitting still. Two Paths does three things about it:**
 
 1. **Submit** — the company's sales invoices come into the platform and are checked by a second pair of eyes.
 2. **Advance** — once approved, the treasury desk funds against those invoices, often the same day.
@@ -29,7 +29,7 @@
 
 ## Part 2 — The people: every role at a glance
 
-> **"Adventra is one platform with six job-specific consoles. Each person logs in and sees only the tabs their job needs. No noise. Here's who's who:"**
+> **"Two Paths is one platform with six job-specific consoles. Each person logs in and sees only the tabs their job needs. No noise. Here's who's who:"**
 
 | Role | Console | What they own |
 |---|---|---|
@@ -285,7 +285,7 @@ Then eight decision rules — from **clearance** (dead product, too much stock: 
 
 ## Part 6 — Closing
 
-> **"So that's Adventra in ten minutes. One platform, six consoles, thirty-four pages, and a forecasting engine that turns twelve months of history into a buying decision with a date on it. Submit, advance, collect — while aging, concentration, and credit risk move live. Thank you — I'm happy to take questions."**
+> **"So that's Two Paths in ten minutes. One platform, six consoles, thirty-four pages, and a forecasting engine that turns twelve months of history into a buying decision with a date on it. Submit, advance, collect — while aging, concentration, and credit risk move live. Thank you — I'm happy to take questions."**
 
 (Useful answers: "The approval step always gates funding — nothing gets money without a check." / "The forecast recomputes live and persists daily snapshots — it refreshes every 60 seconds." / "Role changes are validated against a known-role allowlist and every privileged action is audit-logged.")
 

@@ -1,13 +1,13 @@
-// Adventra — Architecture & Workflow Diagrams deck (20 slides)
-// Run: node generate-diagrams.cjs  →  outputs ../Adventra-Architecture-Workflows.pptx
+// Two Paths — Architecture & Workflow Diagrams deck (20 slides)
+// Run: node generate-diagrams.cjs  →  outputs ../TwoPaths-Architecture-Workflows.pptx
 const PptxGenJS = require("pptxgenjs");
 
 const pptx = new PptxGenJS();
 pptx.defineLayout({ name: "WIDE", width: 13.333, height: 7.5 });
 pptx.layout = "WIDE";
-pptx.author = "Adventra";
-pptx.company = "Adventra";
-pptx.title = "Adventra — Architecture & Workflow Diagrams";
+pptx.author = "Two Paths";
+pptx.company = "Two Paths";
+pptx.title = "Two Paths — Architecture & Workflow Diagrams";
 pptx.subject = "System architecture and goods/inventory workflow diagrams";
 pptx.theme = { headFontFace: "Segoe UI", bodyFontFace: "Segoe UI", lang: "en-US" };
 
@@ -57,7 +57,7 @@ function deco(s, num, opts = {}) {
     fill: { color: opts.dark ? C.blue : C.blueSoft }, line: { type: "none" },
   });
   if (!opts.dark) {
-    tx(s, "Adventra — Architecture & Workflow Diagrams", {
+    tx(s, "Two Paths — Architecture & Workflow Diagrams", {
       x: 0.55, y: H - 0.42, w: 7.5, h: 0.28,
       fontSize: 8.5, color: C.muted, charSpacing: 0.6,
     });
@@ -66,7 +66,7 @@ function deco(s, num, opts = {}) {
       fontSize: 8.5, color: C.muted, align: "right",
     });
   } else {
-    tx(s, "Adventra · v2.4", {
+    tx(s, "Two Paths · v2.4", {
       x: 0.55, y: H - 0.42, w: 4, h: 0.28,
       fontSize: 8.5, color: "8FA3C4",
     });
@@ -299,7 +299,7 @@ function statusRow(s, { y, label, steps: stps, x0 = 0.55, x1 = W - 0.55, h = 0.4
     x: 0.85, y: 0.95, w: 11.6, h: 0.34,
     fontSize: 13, color: C.cyan, bold: true, charSpacing: 3,
   });
-  tx(s, "Adventra", {
+  tx(s, "Two Paths", {
     x: 0.82, y: 1.3, w: 11.6, h: 1.3,
     fontSize: 66, color: "FFFFFF", bold: true,
   });
@@ -307,7 +307,7 @@ function statusRow(s, { y, label, steps: stps, x0 = 0.55, x1 = W - 0.55, h = 0.4
     x: 0.85, y: 2.62, w: 11.6, h: 0.7,
     fontSize: 30, color: "FFFFFF", bold: true,
   });
-  tx(s, "The complete system architecture and every goods/inventory workflow, extracted directly from the Adventra implementation — React SPA on Express + DynamoDB, with a race-safe double-entry stock ledger and a shared demand-forecast engine.", {
+  tx(s, "The complete system architecture and every goods/inventory workflow, extracted directly from the Two Paths implementation — React SPA on Express + DynamoDB, with a race-safe double-entry stock ledger and a shared demand-forecast engine.", {
     x: 0.85, y: 3.42, w: 10.6, h: 1.0,
     fontSize: 13, color: "B7C6DE",
   });
@@ -1365,7 +1365,7 @@ function statusRow(s, { y, label, steps: stps, x0 = 0.55, x1 = W - 0.55, h = 0.4
     tx(s, it[2], { x: x + 0.42, y: y + 0.3, w: 5.35, h: 0.5, fontSize: 8.5, color: "8FA3C4" });
   });
   rrect(s, { x: 0.85, y: 6.72, w: 11.6, h: 0.55, fill: { color: C.navySoft }, line: { color: C.navySoft2, width: 1 }, rectRadius: 0.1 });
-  tx(s, "Architecture + workflows — extracted from the working Adventra implementation. Every diagram maps 1:1 to code in backend/src and frontend/src.", {
+  tx(s, "Architecture + workflows — extracted from the working Two Paths implementation. Every diagram maps 1:1 to code in backend/src and frontend/src.", {
     x: 1.05, y: 6.72, w: 11.2, h: 0.55, valign: "middle",
     fontSize: 10.5, color: "B7C6DE", align: "center",
   });
@@ -1375,7 +1375,7 @@ function statusRow(s, { y, label, steps: stps, x0 = 0.55, x1 = W - 0.55, h = 0.4
 }
 
 // ── Write file ──────────────────────────────────────────────────
-const outPath = require("path").join(__dirname, "..", "Adventra-Architecture-Workflows.pptx");
+const outPath = require("path").join(__dirname, "..", "TwoPaths-Architecture-Workflows.pptx");
 pptx
   .writeFile({ fileName: outPath })
   .then((fn) => console.log("Saved:", fn))

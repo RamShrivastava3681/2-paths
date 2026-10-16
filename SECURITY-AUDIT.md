@@ -71,7 +71,7 @@ closes the nodemailer SSRF / arbitrary-file-read advisories.
 - **Token entropy** — NOA & debtor-reminder tokens are `uuid()` (unguessable); reminder tokens are invalidated after one use.
 - **IDOR on uploads** — S3 keys must start with the requester's own `userId/`.
 - **Secrets in repo** — `.gitignore` covers `.env` / `*.local`; no secrets found in tracked files.
-- **CSRF** — **now protected**: sessions are `httpOnly` + `SameSite=Strict` cookies (browsers never attach them to cross-site requests) **plus** a server-side `Origin` allowlist check on every non-GET `/api` request (covers older browsers / relaxed SameSite behavior). Verified live: `Origin: https://adventra.whizunikhub.com` → allowed; `Origin: http://evil.example.com` → 403.
+- **CSRF** — **now protected**: sessions are `httpOnly` + `SameSite=Strict` cookies (browsers never attach them to cross-site requests) **plus** a server-side `Origin` allowlist check on every non-GET `/api` request (covers older browsers / relaxed SameSite behavior). Verified live: `Origin: https://demo.whizunikhub.com` → allowed; `Origin: http://evil.example.com` → 403.
 - **Sessions** — stateless JWT held in an `httpOnly` cookie: `SameSite=Strict`, `Path=/`, `Secure` in production, 7-day `Max-Age`. `localStorage` no longer holds the token; the `Authorization: Bearer` header remains as a fallback for API scripts/tests.
 
 ---

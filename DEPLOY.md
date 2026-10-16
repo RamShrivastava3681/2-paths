@@ -1,4 +1,4 @@
-# 🚀 Adventra Platform — Deployment Guide
+# 🚀 Two Paths Platform — Deployment Guide
 
 ## Overview
 
@@ -27,8 +27,8 @@ No Node.js process is needed for the frontend at runtime.
 
 ```bash
 # Clone the repository
-git clone <your-repo-url> adventra
-cd adventra
+git clone <your-repo-url> twopaths
+cd twopaths
 
 # ── Backend ───────────────────────────────────────
 cd backend
@@ -74,7 +74,7 @@ JWT_EXPIRES_IN=7d
 AWS_REGION=ap-south-1
 AWS_ACCESS_KEY_ID=<your-aws-key>
 AWS_SECRET_ACCESS_KEY=<your-aws-secret>
-DYNAMODB_TABLE=adventra
+DYNAMODB_TABLE=2-paths-table
 CORS_ORIGIN=https://demo.whizunikhub.com
 ```
 
@@ -108,8 +108,8 @@ pm2 startup
 
 ```bash
 pm2 status                     # List all processes
-pm2 logs adventra-backend      # Backend logs
-pm2 restart adventra-backend   # Restart backend
+pm2 logs twopaths-backend      # Backend logs
+pm2 restart twopaths-backend   # Restart backend
 pm2 stop ecosystem.config.cjs  # Stop all
 ```
 
@@ -125,13 +125,13 @@ Then configure Nginx to serve it.
 Copy the example config:
 
 ```bash
-sudo cp deploy/nginx.conf /etc/nginx/sites-available/adventra
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/demo
 ```
 
 Edit it to set your domain and root path:
 
 ```bash
-sudo nano /etc/nginx/sites-available/adventra
+sudo nano /etc/nginx/sites-available/demo
 ```
 
 **Key changes to make:**
@@ -143,7 +143,7 @@ sudo nano /etc/nginx/sites-available/adventra
 Enable the site:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/adventra /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/demo /etc/nginx/sites-enabled/
 sudo nginx -t            # Validate config
 sudo systemctl reload nginx
 ```
@@ -199,7 +199,7 @@ cd backend && npm install && npm run build && cd ..
 cd frontend && npm install && npm run build && cd ..
 
 # Restart backend
-pm2 restart adventra-backend
+pm2 restart twopaths-backend
 
 # Frontend just needs Nginx to pick up the new files (already live if dist/ is in-place)
 sudo systemctl reload nginx   # if you changed the config
@@ -210,7 +210,7 @@ sudo systemctl reload nginx   # if you changed the config
 ## 9. Folder Reference
 
 ```
-adventra/
+twopaths/
 ├── ecosystem.config.cjs     # PM2 config (backend only)
 ├── deploy/
 │   └── nginx.conf           # Nginx config example

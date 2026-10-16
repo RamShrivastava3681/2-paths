@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Adventra — Live Demo Speech</title>
+<title>Two Paths — Live Demo Speech</title>
 <style>
 :root {
   --bg: #f6f5f2; --card: #ffffff; --ink: #1d2329; --muted: #5c6670;
@@ -101,21 +101,21 @@ footer { margin-top: 70px; padding-top: 18px; border-top: 2px solid var(--line);
 <body>
 <div class="container">
 <div class="hero"><span class="badge">🎤 Live demo speech · ~10 minutes</span>
-<h1 id="-adventra--live-demo-speech">🎤 Adventra — Live Demo Speech</h1>
-<blockquote><strong>What this is:</strong> a word-for-word script you can deliver while demoing Adventra to clients, investors, or your own team. It covers <strong>every role</strong>, <strong>every tab</strong>, and the <strong>entire demand-forecasting engine</strong> — every formula, in plain language with real numbers. Read it straight through (~10 minutes) or use the appendix cheat sheet for a live walkthrough.</blockquote>
+<h1 id="-twopaths--live-demo-speech">🎤 Two Paths — Live Demo Speech</h1>
+<blockquote><strong>What this is:</strong> a word-for-word script you can deliver while demoing Two Paths to clients, investors, or your own team. It covers <strong>every role</strong>, <strong>every tab</strong>, and the <strong>entire demand-forecasting engine</strong> — every formula, in plain language with real numbers. Read it straight through (~10 minutes) or use the appendix cheat sheet for a live walkthrough.</blockquote>
 <p><strong>How to use this script</strong></p>
 </div>
 <ul><li><strong>Bold = say it out loud.</strong> (Parentheses = stage direction: click, point, pause.)</li><li>Sections are roughly one page each when printed, so you can cut any page without breaking the flow.</li><li>Short on time? Read Parts 1, 2, 4, 5 and 7 — that's the whole story in about six pages.</li><li>Every forecasting number in Part 5 is the <em>actual output</em> of the engine in <code>frontend/src/lib/forecast-engine.ts</code>, run against a real example product (Trekking Backpack <code>TB-1001</code>).</li></ul>
 <hr/>
-<h2 id="part-1--opening-what-adventra-is">Part 1 — Opening: what Adventra is</h2>
-<blockquote><strong>"Good morning everyone. I'm going to show you Adventra — a receivables-factoring and debtor-monitoring platform that turns outstanding invoices into working capital, without losing sight of risk."</strong></blockquote>
-<p><strong>"Let me set the scene. A trading company lives on its cash flow. Every day it ships goods, raises invoices, and waits — sometimes 30, 60, even 90 days — to get paid. That waiting is money sitting still. Adventra does three things about it:</strong></p>
+<h2 id="part-1--opening-what-twopaths-is">Part 1 — Opening: what Two Paths is</h2>
+<blockquote><strong>"Good morning everyone. I'm going to show you Two Paths — a receivables-factoring and debtor-monitoring platform that turns outstanding invoices into working capital, without losing sight of risk."</strong></blockquote>
+<p><strong>"Let me set the scene. A trading company lives on its cash flow. Every day it ships goods, raises invoices, and waits — sometimes 30, 60, even 90 days — to get paid. That waiting is money sitting still. Two Paths does three things about it:</strong></p>
 <ol><li><strong>Submit</strong> — the company's sales invoices come into the platform and are checked by a second pair of eyes.</li><li><strong>Advance</strong> — once approved, the treasury desk funds against those invoices, often the same day.</li><li><strong>Collect</strong> — the platform watches every debtor, chases payments with automated reminders, and tracks aging, concentration, and credit risk live.</li></ol>
 <p><strong>And beneath all of it — the part I'm most proud of — is a demand-forecasting engine that tells you, for every single product, when you'll run out of stock and exactly how much to reorder. I'll spend the last part of this demo on that, formula by formula."</strong></p>
 <p>(Point at the landing page: the stat strip and live monitoring panels.)</p>
 <hr/>
 <h2 id="part-2--the-people-every-role-at-a-glance">Part 2 — The people: every role at a glance</h2>
-<blockquote><strong>"Adventra is one platform with six job-specific consoles. Each person logs in and sees only the tabs their job needs. No noise. Here's who's who:"</strong></blockquote>
+<blockquote><strong>"Two Paths is one platform with six job-specific consoles. Each person logs in and sees only the tabs their job needs. No noise. Here's who's who:"</strong></blockquote>
 <div class="table-wrap"><table><thead><tr><th>Role</th><th>Console</th><th>What they own</th></tr></thead><tbody><tr><td><strong>Admin</strong> (<code>factor_admin</code>)</td><td><strong>Factor console</strong></td><td>Everything — the full portfolio, all tabs, approvals, team roles, configuration</td></tr><tr><td><strong>Checker</strong></td><td><strong>Checker desk</strong></td><td>The second pair of eyes — maker-checker approval of every submitted transaction</td></tr><tr><td><strong>Treasury</strong></td><td><strong>Treasury desk</strong></td><td>The funding queue — disbursing advances, releasing reserves on collection</td></tr><tr><td><strong>Operations</strong></td><td><strong>Operations desk</strong></td><td>Day-to-day transactions — buying, receiving, selling, shipping</td></tr><tr><td><strong>Sales rep</strong></td><td><strong>Sales workspace</strong></td><td>Leads, quotations, debtors, suppliers — the front of the funnel</td></tr><tr><td><strong>Reporting manager</strong></td><td><strong>Reporting console</strong></td><td>Team output, per-member progress, "view-as" inspection, approval requests</td></tr><tr><td><strong>Client</strong></td><td><strong>Trader portal</strong></td><td>The base role every new account starts with, before roles are assigned</td></tr></tbody></table></div>
 <blockquote><strong>"Notice the pattern: the closer you get to money, the fewer tabs you see. The admin sees everything; the checker sees what needs checking; the sales rep sees only sales."</strong></blockquote>
 <hr/>
@@ -211,13 +211,13 @@ refillDate    = today + leadTime = Aug 18</code></pre>
 <blockquote><strong>"And every number I just showed you is auditable — click any forecast and it expands to show the complete calculation breakdown, number by number. No black box."</strong></blockquote>
 <hr/>
 <h2 id="part-6--closing">Part 6 — Closing</h2>
-<blockquote><strong>"So that's Adventra in ten minutes. One platform, six consoles, thirty-four pages, and a forecasting engine that turns twelve months of history into a buying decision with a date on it. Submit, advance, collect — while aging, concentration, and credit risk move live. Thank you — I'm happy to take questions."</strong></blockquote>
+<blockquote><strong>"So that's Two Paths in ten minutes. One platform, six consoles, thirty-four pages, and a forecasting engine that turns twelve months of history into a buying decision with a date on it. Submit, advance, collect — while aging, concentration, and credit risk move live. Thank you — I'm happy to take questions."</strong></blockquote>
 <p>(Useful answers: "The approval step always gates funding — nothing gets money without a check." / "The forecast recomputes live and persists daily snapshots — it refreshes every 60 seconds." / "Role changes are validated against a known-role allowlist and every privileged action is audit-logged.")</p>
 <hr/>
 <h2 id="appendix--live-demo-cheat-sheet-the-ten-clicks">Appendix — Live-demo cheat sheet (the ten clicks)</h2>
 <ol><li><strong>Landing page</strong> → stat strip, live monitoring panels</li><li><strong>Sign in</strong> → show the role badge and console label</li><li><strong>Dashboard</strong> → aging waterfall chart</li><li><strong>Sales invoices</strong> → create one → watch it land on the <strong>Checker</strong> desk</li><li><strong>Checker</strong> approves → the invoice enters the <strong>Funding queue</strong></li><li><strong>Treasury</strong> funds → status becomes "advanced"</li><li><strong>Products</strong> → open TB-1001 → reorder level and lead time</li><li><strong>Inventory</strong> → stock ledger → drill into a linked invoice</li><li><strong>Demand forecast</strong> → expand TB-1001 → walk the calculation breakdown</li><li><strong>Alerts</strong> → show a credit-limit breach firing in real time</li></ol>
 <footer>
-<p>Adventra demo speech — covers every role, every tab, and the full demand-forecasting engine (14 formula steps).<br/>
+<p>Two Paths demo speech — covers every role, every tab, and the full demand-forecasting engine (14 formula steps).<br/>
 Generated from <code>DEMO-SPEECH.md</code> · Numbers in Part 5 are the real output of <code>forecastSKU()</code> in <code>frontend/src/lib/forecast-engine.ts</code>.</p>
 </footer>
 </div>

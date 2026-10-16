@@ -147,7 +147,7 @@ async function seedAdmin() {
           id,
           email: config.admin.email,
           passwordHash,
-          companyName: "Adventra Platform Admin",
+          companyName: "Two Paths Platform Admin",
           contactName: null,
           roles: ["factor_admin"],
           createdAt: now,
@@ -213,7 +213,7 @@ async function seedAdmin() {
 }
 
 app.listen(config.port, async () => {
-  console.log(`🚀 Adventra Platform API running on port ${config.port}`);
+  console.log(`🚀 Two Paths Platform API running on port ${config.port}`);
   console.log(`   Environment: ${config.nodeEnv}`);
   await seedAdmin();
   

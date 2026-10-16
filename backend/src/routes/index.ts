@@ -2326,7 +2326,7 @@ router.post("/invoices/:id/send-noa", authMiddleware, async (req, res) => {
 
     // Build the invoice PDF (Tally-style tax invoice + e-Way Bill section).
     const { pdf, number, grandTotal } = await buildInvoiceTallyBuffer(inv, inv.clientId);
-    const companyName = "Adventra Platform";
+    const companyName = "Two Paths Platform";
 
     const filename = `${number.replace(/[^A-Za-z0-9-_]/g, "_")}.pdf`;
     const noaUrl = `${config.appUrl}/noa/${inv.noaToken}`;
@@ -6207,7 +6207,7 @@ async function resolveTallySellerParts(clientId: string): Promise<{
       logoImage = null;
     }
   }
-  // Default to the Adventra logo shipped in <repo-root>/img/logo.png.
+  // Default to the Two Paths logo shipped in <repo-root>/img/logo.png.
   if (!logoImage) logoImage = loadRootLogo();
   return { seller, bank, bankRaw: t.bankDetails || null, declarationRaw: t.declaration || null, logoImage };
 }

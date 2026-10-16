@@ -7,7 +7,7 @@ import * as db from "./dynamodb.js";
 // Do not use legacy "Insight Factor" branding here.
 // ---------------------------------------------------------------------------
 
-export const PLATFORM_NAME = "Adventra Platform";
+export const PLATFORM_NAME = "Two Paths Platform";
 
 function senderName(): string {
   return PLATFORM_NAME;

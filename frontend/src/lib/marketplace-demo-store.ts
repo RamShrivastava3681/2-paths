@@ -1,5 +1,5 @@
 // ===========================================================================
-// Marketplace Integration Demo Store — Adventra PoC Fixtures & State
+// Marketplace Integration Demo Store — Two Paths PoC Fixtures & State
 // Compliant with WhizUnik Marketplace Developer Guide (v1.0 - 6 Oct 2026)
 // ===========================================================================
 
@@ -108,27 +108,27 @@ export const BASELINE_CHANNELS: ChannelStats[] = [
 ];
 
 export const BASELINE_INVENTORY: ProductInventory[] = [
-  { whizunikSku: "AD-TS-BLK-M", variant: "Black tee M", amazonSku: "AMZ-TS-BLK-M", shopifyVariant: "DEMO-SH-101", flipkartSku: "FK-TS-BLK-M", warehouse: "WH-DEMO", onHand: 20, reserved: 0, qcHold: 0, available: 20 },
-  { whizunikSku: "AD-TS-BLK-L", variant: "Black tee L", amazonSku: "AMZ-TS-BLK-L", shopifyVariant: "DEMO-SH-102", warehouse: "WH-DEMO", onHand: 15, reserved: 0, qcHold: 0, available: 15 },
-  { whizunikSku: "AD-TS-WHT-M", variant: "White tee M", amazonSku: "AMZ-TS-WHT-M", shopifyVariant: "DEMO-SH-103", warehouse: "WH-DEMO", onHand: 18, reserved: 0, qcHold: 0, available: 18 },
-  { whizunikSku: "AD-TS-WHT-L", variant: "White tee L", amazonSku: "AMZ-TS-WHT-L", shopifyVariant: "DEMO-SH-104", warehouse: "WH-DEMO", onHand: 12, reserved: 0, qcHold: 0, available: 12 },
-  { whizunikSku: "AD-PO-NVY-M", variant: "Navy polo M", amazonSku: "AMZ-PO-NVY-M", shopifyVariant: "DEMO-SH-105", warehouse: "WH-DEMO", onHand: 10, reserved: 0, qcHold: 0, available: 10 },
-  { whizunikSku: "AD-PO-NVY-L", variant: "Navy polo L", amazonSku: "AMZ-PO-NVY-L", shopifyVariant: "DEMO-SH-106", warehouse: "WH-DEMO", onHand: 8, reserved: 0, qcHold: 0, available: 8 },
+  { whizunikSku: "TP-TS-BLK-M", variant: "Black tee M", amazonSku: "AMZ-TS-BLK-M", shopifyVariant: "DEMO-SH-101", flipkartSku: "FK-TS-BLK-M", warehouse: "WH-DEMO", onHand: 20, reserved: 0, qcHold: 0, available: 20 },
+  { whizunikSku: "TP-TS-BLK-L", variant: "Black tee L", amazonSku: "AMZ-TS-BLK-L", shopifyVariant: "DEMO-SH-102", warehouse: "WH-DEMO", onHand: 15, reserved: 0, qcHold: 0, available: 15 },
+  { whizunikSku: "TP-TS-WHT-M", variant: "White tee M", amazonSku: "AMZ-TS-WHT-M", shopifyVariant: "DEMO-SH-103", warehouse: "WH-DEMO", onHand: 18, reserved: 0, qcHold: 0, available: 18 },
+  { whizunikSku: "TP-TS-WHT-L", variant: "White tee L", amazonSku: "AMZ-TS-WHT-L", shopifyVariant: "DEMO-SH-104", warehouse: "WH-DEMO", onHand: 12, reserved: 0, qcHold: 0, available: 12 },
+  { whizunikSku: "TP-PO-NVY-M", variant: "Navy polo M", amazonSku: "AMZ-PO-NVY-M", shopifyVariant: "DEMO-SH-105", warehouse: "WH-DEMO", onHand: 10, reserved: 0, qcHold: 0, available: 10 },
+  { whizunikSku: "TP-PO-NVY-L", variant: "Navy polo L", amazonSku: "AMZ-PO-NVY-L", shopifyVariant: "DEMO-SH-106", warehouse: "WH-DEMO", onHand: 8, reserved: 0, qcHold: 0, available: 8 },
 ];
 
 export const BASELINE_MAPPINGS: SkuMapping[] = [
-  { id: "map-1", channel: "Amazon", channelSku: "AMZ-TS-BLK-M", listingId: "ASIN-B08123456", whizunikSku: "AD-TS-BLK-M", productName: "Adventra Classic Tee", variant: "Black / M", warehouse: "WH-DEMO", mrp: 1499, sellingPrice: 1000, hsn: "61091000", gstRate: 5, status: "Active", safetyStock: 2 },
-  { id: "map-2", channel: "Shopify", channelSku: "DEMO-SH-101", listingId: "SH-VAR-99101", whizunikSku: "AD-TS-BLK-M", productName: "Adventra Classic Tee", variant: "Black / M", warehouse: "WH-DEMO", mrp: 1499, sellingPrice: 1000, hsn: "61091000", gstRate: 5, status: "Active", safetyStock: 0 },
-  { id: "map-3", channel: "Flipkart", channelSku: "FK-TS-BLK-M", listingId: "FSN-TSH98721", whizunikSku: "AD-TS-BLK-M", productName: "Adventra Classic Tee", variant: "Black / M", warehouse: "WH-DEMO", mrp: 1499, sellingPrice: 1000, hsn: "61091000", gstRate: 5, status: "Active", safetyStock: 2 },
-  { id: "map-4", channel: "Amazon", channelSku: "AMZ-TS-BLK-L", listingId: "ASIN-B08123457", whizunikSku: "AD-TS-BLK-L", productName: "Adventra Classic Tee", variant: "Black / L", warehouse: "WH-DEMO", mrp: 1499, sellingPrice: 1000, hsn: "61091000", gstRate: 5, status: "Active", safetyStock: 2 },
-  { id: "map-5", channel: "Amazon", channelSku: "AMZ-TS-WHT-M", listingId: "ASIN-B08123458", whizunikSku: "AD-TS-WHT-M", productName: "Adventra Classic Tee", variant: "White / M", warehouse: "WH-DEMO", mrp: 1499, sellingPrice: 1000, hsn: "61091000", gstRate: 5, status: "Active", safetyStock: 2 },
-  { id: "map-6", channel: "Amazon", channelSku: "AMZ-PO-NVY-M", listingId: "ASIN-B08123460", whizunikSku: "AD-PO-NVY-M", productName: "Adventra Pique Polo", variant: "Navy / M", warehouse: "WH-DEMO", mrp: 1999, sellingPrice: 1400, hsn: "61051000", gstRate: 5, status: "Active", safetyStock: 1 },
+  { id: "map-1", channel: "Amazon", channelSku: "AMZ-TS-BLK-M", listingId: "ASIN-B08123456", whizunikSku: "TP-TS-BLK-M", productName: "Two Paths Classic Tee", variant: "Black / M", warehouse: "WH-DEMO", mrp: 1499, sellingPrice: 1000, hsn: "61091000", gstRate: 5, status: "Active", safetyStock: 2 },
+  { id: "map-2", channel: "Shopify", channelSku: "DEMO-SH-101", listingId: "SH-VAR-99101", whizunikSku: "TP-TS-BLK-M", productName: "Two Paths Classic Tee", variant: "Black / M", warehouse: "WH-DEMO", mrp: 1499, sellingPrice: 1000, hsn: "61091000", gstRate: 5, status: "Active", safetyStock: 0 },
+  { id: "map-3", channel: "Flipkart", channelSku: "FK-TS-BLK-M", listingId: "FSN-TSH98721", whizunikSku: "TP-TS-BLK-M", productName: "Two Paths Classic Tee", variant: "Black / M", warehouse: "WH-DEMO", mrp: 1499, sellingPrice: 1000, hsn: "61091000", gstRate: 5, status: "Active", safetyStock: 2 },
+  { id: "map-4", channel: "Amazon", channelSku: "AMZ-TS-BLK-L", listingId: "ASIN-B08123457", whizunikSku: "TP-TS-BLK-L", productName: "Two Paths Classic Tee", variant: "Black / L", warehouse: "WH-DEMO", mrp: 1499, sellingPrice: 1000, hsn: "61091000", gstRate: 5, status: "Active", safetyStock: 2 },
+  { id: "map-5", channel: "Amazon", channelSku: "AMZ-TS-WHT-M", listingId: "ASIN-B08123458", whizunikSku: "TP-TS-WHT-M", productName: "Two Paths Classic Tee", variant: "White / M", warehouse: "WH-DEMO", mrp: 1499, sellingPrice: 1000, hsn: "61091000", gstRate: 5, status: "Active", safetyStock: 2 },
+  { id: "map-6", channel: "Amazon", channelSku: "AMZ-PO-NVY-M", listingId: "ASIN-B08123460", whizunikSku: "TP-PO-NVY-M", productName: "Two Paths Pique Polo", variant: "Navy / M", warehouse: "WH-DEMO", mrp: 1999, sellingPrice: 1400, hsn: "61051000", gstRate: 5, status: "Active", safetyStock: 1 },
   { id: "map-7", channel: "Amazon", channelSku: "AMZ-UNKNOWN", listingId: "ASIN-UNMAPPED-99", whizunikSku: "UNMAPPED", productName: "Unmapped Listing Item", variant: "Unknown", warehouse: "WH-DEMO", mrp: 999, sellingPrice: 999, hsn: "61091000", gstRate: 5, status: "Error", safetyStock: 0 },
 ];
 
 export const WORKFLOW_STEPS = [
   { step: 1, title: "Import Marketplace Order", subtitle: "Load mock event EVT-1001 (DEMO-AMZ-1001, 2 units @ ₹1,000)", role: "Sales & Integration" },
-  { step: 2, title: "Match SKU & Validate", subtitle: "AMZ-TS-BLK-M resolves to AD-TS-BLK-M in WH-DEMO", role: "Integration Engine" },
+  { step: 2, title: "Match SKU & Validate", subtitle: "AMZ-TS-BLK-M resolves to TP-TS-BLK-M in WH-DEMO", role: "Integration Engine" },
   { step: 3, title: "Reserve Stock & Create SO", subtitle: "Reserve 2 units; create sales order SO-DEMO-1001", role: "Inventory & Sales" },
   { step: 4, title: "Warehouse Pick & Pack", subtitle: "Open warehouse task; confirm 2 picked, 2 packed", role: "Warehouse Operator" },
   { step: 5, title: "Invoice & Dispatch", subtitle: "Generate INV-DEMO-1001 (DEMO WATERMARK), dispatch via BlueDart", role: "Warehouse & Finance" },
@@ -166,7 +166,7 @@ export const INITIAL_STATE: DemoWorkflowState = {
   selectedChannel: "all",
 };
 
-const STORAGE_KEY = "adventra_marketplace_demo_state_v1";
+const STORAGE_KEY = "twopaths_marketplace_demo_state_v1";
 
 export function loadDemoState(): DemoWorkflowState {
   try {
@@ -208,7 +208,7 @@ export function resetDemoState(): DemoWorkflowState {
   return INITIAL_STATE;
 }
 
-// Compute the 6 Checkpoints ledger for the primary demonstration SKU (AD-TS-BLK-M)
+// Compute the 6 Checkpoints ledger for the primary demonstration SKU (TP-TS-BLK-M)
 export function getLedgerCheckpoints(currentStep: number): InventoryLedgerRow[] {
   return [
     {

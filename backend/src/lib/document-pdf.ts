@@ -456,7 +456,7 @@ export function buildDocumentPdf(data: DocumentPdfData): Promise<Buffer> {
       bufferPages: true,
       info: {
         Title: `${docTypeLabel(data.kind)} ${data.number}`,
-        Author: data.companyName || "Adventra",
+        Author: data.companyName || "Two Paths",
         Subject: `${docTypeLabel(data.kind)} for ${data.customerName || "customer"}`,
       },
     });
@@ -676,7 +676,7 @@ export function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
       bufferPages: true,
       info: {
         Title: `Invoice ${data.number}`,
-        Author: data.companyName || "Adventra",
+        Author: data.companyName || "Two Paths",
         Subject: `Invoice ${data.number} for ${data.customerName || "customer"}`,
       },
     });
@@ -688,7 +688,7 @@ export function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
 
     // ── Header: company block (left) + document label (right) ──
     doc.font("Helvetica-Bold").fontSize(18).fillColor(INV_INK.slate900);
-    doc.text(truncate(data.companyName || "Adventra", 42), PAGE.margin, PAGE.margin, {
+    doc.text(truncate(data.companyName || "Two Paths", 42), PAGE.margin, PAGE.margin, {
       width: CONTENT_WIDTH * 0.55,
     });
     let y = PAGE.margin + 22;
@@ -920,7 +920,7 @@ export function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
       align: "center",
     });
     doc.font("Helvetica-Bold").fontSize(9).fillColor(INV_INK.slate700);
-    doc.text(data.companyName || "Adventra", PAGE.width - PAGE.margin - lineW, sigY + 20, {
+    doc.text(data.companyName || "Two Paths", PAGE.width - PAGE.margin - lineW, sigY + 20, {
       width: lineW,
       align: "center",
     });
@@ -932,7 +932,7 @@ export function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
       doc.save();
       doc.font("Helvetica").fontSize(7.5).fillColor(INV_INK.slate400);
       doc.text(
-        "This is a computer-generated invoice from " + (data.companyName || "Adventra") + ".",
+        "This is a computer-generated invoice from " + (data.companyName || "Two Paths") + ".",
         PAGE.margin,
         PAGE.height - 40,
         { width: CONTENT_WIDTH * 0.7 },
@@ -1816,7 +1816,7 @@ export function buildSalesOrderTallyPdf(data: SalesOrderTallyData): Promise<Buff
       const rightRowsH = ry - y0;
 
       // Logo cell fills the remaining right-column height (min 64).
-      // White background: the Adventra logo asset is a dark mark on
+      // White background: the Two Paths logo asset is a dark mark on
       // transparency, so it needs a light cell to stay visible.
       const logoH = Math.max(64, leftH - rightRowsH);
       const lx = M + LW;
@@ -2843,7 +2843,7 @@ export function buildInvoiceTallyPdf(data: TallyInvoiceData): Promise<Buffer> {
 
 // ═════════════════════════════════════════════════════════════════════════════
 // GARMENT PURCHASE ORDER PDF (landscape, Tally-style bordered grid)
-// ── "Purchase Order" title · vendor block · consignee (Adventra) + buyer
+// ── "Purchase Order" title · vendor block · consignee (Two Paths) + buyer
 //    blocks · clause grid (packaging / delivery / cancellation / delay…) ·
 //    item table with size-breakup columns (28/30/32/…) + fabric + HSN +
 //    color + PP prices · totals · amount-in-words · bank · declaration ·

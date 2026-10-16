@@ -20,7 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 //   <DraftResumeBanner draft={draft} onApply={(d) => { setF(d.f); setLines(d.lines); ... }} />
 //   // on manual save success: draft.clear()
 
-const PREFIX = "adventra:draft:v1:";
+const PREFIX = "twopaths:draft:v1:";
 const DEBOUNCE_MS = 800;
 
 type StoredDraft<T> = {

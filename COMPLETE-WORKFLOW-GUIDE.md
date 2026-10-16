@@ -1,7 +1,7 @@
-# Adventra Goods Platform — Complete Workflow Implementation Guide
+# Two Paths Goods Platform — Complete Workflow Implementation Guide
 
 > **Purpose of this document:** A self-contained, copy-paste-ready specification that explains how
-> Adventra implements the complete goods/inventory lifecycle so you can reproduce the **exact**
+> Two Paths implements the complete goods/inventory lifecycle so you can reproduce the **exact**
 > features in your other platform. It covers: **Product Catalogue → Purchase Order → Proforma →
 > Purchase Invoice → GRN → Quotation → Sales Order → Dispatch → Sales Invoice → Inventory →
 > Demand Forecasting**.
@@ -516,6 +516,6 @@ breakdown, CSV export, manual "Recompute" button.
 8. **Wire proformas both ways** (purchase proforma → PO; sales proforma → SO).
 9. **Demand forecasting** (shared engine, server persistence, recompute triggers, UI).
 
-Every module above was extracted directly from the working Adventra implementation, so following
+Every module above was extracted directly from the working Two Paths implementation, so following
 this document reproduces the exact behavior — including the subtle bits like dual statuses,
 race-safe confirmations, and derived stock.

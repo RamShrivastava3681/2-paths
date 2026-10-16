@@ -1,4 +1,4 @@
-# Insight Factor (Adventra) — Tech Stack & Technical Q&A
+# Insight Factor (Two Paths) — Tech Stack & Technical Q&A
 
 > **Purpose:** One document that (1) lists every technology used in this project and what it does, and
 > (2) collects the technical questions a person is likely to be asked about the project — with

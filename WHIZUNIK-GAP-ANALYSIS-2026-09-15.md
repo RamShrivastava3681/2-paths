@@ -2,7 +2,7 @@
 ## Detailed Developer Document: Requirements vs. Current Codebase
 
 **Source:** `WhizUnik_Workflow_Clarity_and_Closure_Developer_Guide.pdf` (desktop, extracted 15 Sep 2026)
-**Codebase reviewed:** `adventra-platform` — backend `src/` (Express + DynamoDB single-table) and frontend `src/` (TanStack Start + React Query), 327 files, branch `master` @ 15 Sep 2026.
+**Codebase reviewed:** `two-paths-platform` — backend `src/` (Express + DynamoDB single-table) and frontend `src/` (TanStack Start + React Query), 327 files, branch `master` @ 15 Sep 2026.
 **Companion docs already in repo:** `COMPLETE-WORKFLOW-GUIDE.md` (PDF-1/2/3 specs), `GIT_CHANGES_2026-09-10_to_2026-09-15.md`.
 
 ---

@@ -59,9 +59,9 @@ WHIZUNIK COMMAND is a **monolithic full-stack web application** in one repositor
 1. **Receivables factoring & monitoring** — invoices (AR), purchase invoices (AP), proformas/advances, checker→treasury approval pipeline, NOA emails, reminders, ageing/dashboard.
 2. **Goods trading lifecycle** — product catalogue, quotations, sales orders, purchase orders, goods receipts (GRN), dispatches, inventory/stock movements, and the demand-forecasting + pricing-recommendation engine.
 
-**Topology:** a single VPS runs Nginx (static SPA + reverse proxy) and one PM2 process (fork mode, 1 instance) for the API. There is **one production domain** (`adventra.whizunikhub.com`), **one DynamoDB table**, and **one S3 bucket**. Multi-client isolation is **data-level only**: most entities carry a `clientId` and are queried via `GSI1` (`CLIENT#{clientId}`); there are no per-client deployments, databases, feature flags or tenant configurations beyond `InvoiceTemplate` and `CatalogueSettings` records.
+**Topology:** a single VPS runs Nginx (static SPA + reverse proxy) and one PM2 process (fork mode, 1 instance) for the API. There is **one production domain** (`demo.whizunikhub.com`), **one DynamoDB table**, and **one S3 bucket**. Multi-client isolation is **data-level only**: most entities carry a `clientId` and are queried via `GSI1` (`CLIENT#{clientId}`); there are no per-client deployments, databases, feature flags or tenant configurations beyond `InvoiceTemplate` and `CatalogueSettings` records.
 
-**Naming discrepancy (recorded, not resolved):** the product is simultaneously branded **WHIZUNIK COMMAND** (frontend UI, theme key `whizunik-theme`), **Insight Factor** (backend/API logs, email templates, admin seed, repo/package name, default DynamoDB table `InsightFactor`), and **Adventra** (production domain, NOA email branding hard-coded in a route, seed data, deployment docs). **Globalor** is referenced in the product brief as a **planned client/brand** for the standardised product but has **zero references in code** (see §15). This is recorded as an observation (see §19 O-01).
+**Naming discrepancy (recorded, not resolved):** the product is simultaneously branded **WHIZUNIK COMMAND** (frontend UI, theme key `whizunik-theme`), **Insight Factor** (backend/API logs, email templates, admin seed, repo/package name, default DynamoDB table `InsightFactor`), and **Two Paths** (production domain, NOA email branding hard-coded in a route, seed data, deployment docs). **Globalor** is referenced in the product brief as a **planned client/brand** for the standardised product but has **zero references in code** (see §15). This is recorded as an observation (see §19 O-01).
 
 ---
 
@@ -291,10 +291,10 @@ dynamodb.ts wrapper → DynamoDB (single table) · s3.ts → S3 · email.ts → 
 | Item | Value | Evidence |
 |------|-------|----------|
 | Host | Single VPS (**provider unknown / Not Verified**) | `DEPLOY.md`, `deploy/nginx.conf` |
-| Domain | `adventra.whizunikhub.com` | `deploy/nginx.conf`, `backend/.env.example` (`CORS_ORIGIN`), `DEPLOY.md` |
-| Reverse proxy / static host | Nginx — serves SPA from `/home/www/adventra/frontend/dist`, proxies `/api/` → `127.0.0.1:4040`, `client_max_body_size 12m` | `deploy/nginx.conf` |
+| Domain | `demo.whizunikhub.com` | `deploy/nginx.conf`, `backend/.env.example` (`CORS_ORIGIN`), `DEPLOY.md` |
+| Reverse proxy / static host | Nginx — serves SPA from `/home/www/demo/frontend/dist`, proxies `/api/` → `127.0.0.1:4040`, `client_max_body_size 12m` | `deploy/nginx.conf` |
 | TLS | Let's Encrypt (Certbot), TLSv1.2/1.3, HTTP→HTTPS redirect | `deploy/nginx.conf` |
-| Process manager | PM2 — app `adventra-backend`, fork mode, **1 instance**, `max_memory_restart 500M`, logs to `../logs/`, env from `backend/.env` | `ecosystem.config.cjs` |
+| Process manager | PM2 — app `twopaths-backend`, fork mode, **1 instance**, `max_memory_restart 500M`, logs to `../logs/`, env from `backend/.env` | `ecosystem.config.cjs` |
 | Frontend build | `npm run build` → `frontend/dist` (static) | root `package.json`, `DEPLOY.md` |
 | Backend | `tsc` → `backend/dist/server.js` | `backend/package.json` |
 | CI/CD | **Not Found** — no GitHub Actions / pipelines in repo | repo-wide search |
@@ -350,7 +350,7 @@ Register of external integrations (all **outbound**; no inbound webhooks or thir
 | Report / data exports | **Not Found** (no CSV/Excel export endpoints or buttons) | repo-wide search |
 | PDF generation (out) | Backend `pdfkit` for emailed PDFs (invoices, quotations, SOs, POs, NOA); browser print templates for on-screen save/print (invoice, challan, notes) | `backend/src/lib/document-pdf.ts`, `frontend/src/components/invoice-print.tsx`, `app.challan.$dispatchId.tsx` |
 | Email out (out) | Reminders (scheduler + instant), NOA, counterparty approvals, submission notifications | `backend/src/email.ts`, `backend/src/invoice-reminder.ts` |
-| Demo/seed data (in) | `backend/scripts/seed-crm-demo.ts`, `seed-sku-movements.ts`, `seed-forecast-demo.ts` — Adventra-branded demo datasets writing to the **configured (real) table** | `backend/scripts/*.ts` |
+| Demo/seed data (in) | `backend/scripts/seed-crm-demo.ts`, `seed-sku-movements.ts`, `seed-forecast-demo.ts` — Two Paths-branded demo datasets writing to the **configured (real) table** | `backend/scripts/*.ts` |
 | Database migrations | **Not Found** (schema-less DynamoDB; no migration files) | repo-wide search |
 
 **Data flow (as implemented):**
@@ -371,11 +371,11 @@ PDFs (pdfkit) + emails (SMTP)   ·   S3 (attachments)
 
 | Area | Current state | Evidence |
 |------|---------------|----------|
-| Frontend | Static SPA served by Nginx at `adventra.whizunikhub.com` | `deploy/nginx.conf` |
-| Backend | Express API on `127.0.0.1:4040`, PM2 (`adventra-backend`, fork, 1 instance) | `ecosystem.config.cjs`, `deploy/nginx.conf` |
+| Frontend | Static SPA served by Nginx at `demo.whizunikhub.com` | `deploy/nginx.conf` |
+| Backend | Express API on `127.0.0.1:4040`, PM2 (`twopaths-backend`, fork, 1 instance) | `ecosystem.config.cjs`, `deploy/nginx.conf` |
 | Database | AWS DynamoDB single table (default `InsightFactor`; real table name **Not Verified**) | `backend/.env.example`, `backend/src/config.ts` |
 | Storage | S3 bucket (name Not Verified; `whizunik` in a frontend comment) | `frontend/src/lib/s3-image.ts` |
-| API config | `CORS_ORIGIN=https://adventra.whizunikhub.com`, strict allowlist in prod | `backend/.env.example`, `backend/src/config.ts` |
+| API config | `CORS_ORIGIN=https://demo.whizunikhub.com`, strict allowlist in prod | `backend/.env.example`, `backend/src/config.ts` |
 | Authentication | JWT httpOnly cookie, `Secure` in prod; HSTS preload | `backend/src/middleware/auth.ts`, `server.ts` |
 | Deployment | Manual — `DEPLOY.md` steps (build → upload → PM2 restart → certbot); no CI/CD | `DEPLOY.md`, repo-wide search |
 | Runtime status | **Not Verified** from repo (artifacts exist; nothing proves it is live) | — |
@@ -414,7 +414,7 @@ PDFs (pdfkit) + emails (SMTP)   ·   S3 (attachments)
 
 | Client | What exists today | Evidence | Notes |
 |--------|-------------------|----------|-------|
-| **Adventra** | Production domain `adventra.whizunikhub.com`; PM2 app name `adventra-backend`; `CORS_ORIGIN`; NOA email company name hard-coded `"Adventra"`; Adventra-branded seed data (`ADV-RC-001` SKUs); deployment docs and PPT decks | `deploy/nginx.conf`, `ecosystem.config.cjs`, `backend/.env.example`, `DEPLOY.md`, `backend/src/routes/index.ts` (send-noa), `backend/scripts/seed-*.ts` | Single-tenant deployment assumption — see §19 O-01, §20 Q-4 |
+| **Two Paths** | Production domain `demo.whizunikhub.com`; PM2 app name `twopaths-backend`; `CORS_ORIGIN`; NOA email company name hard-coded `"Two Paths"`; Two Paths-branded seed data (`TP-RC-001` SKUs); deployment docs and PPT decks | `deploy/nginx.conf`, `ecosystem.config.cjs`, `backend/.env.example`, `DEPLOY.md`, `backend/src/routes/index.ts` (send-noa), `backend/scripts/seed-*.ts` | Single-tenant deployment assumption — see §19 O-01, §20 Q-4 |
 | **Globalor** | **Planned client per the product brief — no code, config, or deployment references exist.** Zero matches for "Globalor" in a repository-wide search (including binary PPTX decks/assets); the frontend renders **WHIZUNIK COMMAND**. No Globalor modules, routes, tenant records, or branding exist | repo-wide search (zero matches); `frontend/src/routes/*` (WHIZUNIK COMMAND branding) | Onboarding would currently require code-level brand/template changes (see §20 Q-1/Q-2) |
 | **Retail** | No client-specific implementation. "Retail" appears only in the MRP field description and demo/seed company names (e.g., "MetroMart Retail Pvt Ltd" in `backend/scripts/seed-crm-demo.ts`) | `backend/src/models/product.ts`, `backend/scripts/seed-crm-demo.ts` | Not a tenant |
 
@@ -422,7 +422,7 @@ PDFs (pdfkit) + emails (SMTP)   ·   S3 (attachments)
 
 - `InvoiceTemplate` — per-client document branding (company name/logo/colors/tax id/bank details/currency) used by browser print previews — evidence: `backend/src/models/models-combined.ts`, `frontend/src/routes/app.template.tsx`.
 - `CatalogueSettings` — per-client default minimum gross margin — evidence: `backend/src/models/catalogue-settings.ts`.
-- **Hard-coded client logic:** NOA email company name `const companyName = "Adventra";` in the send-NOA route while every other email/PDF resolves the company name from the user record — evidence: `backend/src/routes/index.ts` (send-noa), `backend/src/email.ts`.
+- **Hard-coded client logic:** NOA email company name `const companyName = "Two Paths";` in the send-NOA route while every other email/PDF resolves the company name from the user record — evidence: `backend/src/routes/index.ts` (send-noa), `backend/src/email.ts`.
 - **No feature flags, no tenant IDs beyond `clientId`, no client-specific env vars, no client-specific frontend/backend branches** exist.
 
 ---
@@ -460,7 +460,7 @@ PDFs (pdfkit) + emails (SMTP)   ·   S3 (attachments)
                                           │ HTTPS (httpOnly session cookie)
                                           ▼
                        ┌─────────────────────────────────────────┐
-                       │   Nginx  (adventra.whizunikhub.com)     │
+                       │   Nginx  (demo.whizunikhub.com)     │
                        │  static SPA (frontend/dist)  +  /api →  │
                        └──────────────────┬──────────────────────┘
                                           │ reverse proxy :4040
@@ -500,7 +500,7 @@ PDFs (pdfkit) + emails (SMTP)   ·   S3 (attachments)
 
 4. **Where do calculations happen?** On the server, inside the API handlers: invoice totals, advance deductions, stock balances, ageing, the balance sheet, and the forecast/reorder/pricing engine (the forecast math is duplicated in the browser too, so the screen can show live numbers — see observation O-04). The database stores raw records; figures are computed when someone opens a page.
 
-5. **Where does client-specific logic exist?** Mostly nowhere — modules are generic and tagged with a client ID. The exceptions: the **invoice document template** (logo, colors, tax details) and **catalogue margin settings** are per-client records; the NOA email hard-codes the company name "Adventra"; deployment/branding targets one domain (`adventra.whizunikhub.com`). **Globalor is planned per the brief but not implemented.**
+5. **Where does client-specific logic exist?** Mostly nowhere — modules are generic and tagged with a client ID. The exceptions: the **invoice document template** (logo, colors, tax details) and **catalogue margin settings** are per-client records; the NOA email hard-codes the company name "Two Paths"; deployment/branding targets one domain (`demo.whizunikhub.com`). **Globalor is planned per the brief but not implemented.**
 
 6. **What external dependencies are important?** **AWS (DynamoDB + S3)** — if AWS is down or the table is misconfigured, the whole product stops; **the mail server (SMTP)** — reminders and approvals depend on it; the **server/VPS** — a single machine runs both the website and the API. No payment gateway, accounting package, or AI service is connected.
 
@@ -514,7 +514,7 @@ Classification: **Normal / No Immediate Concern** · **Needs Review** · **Poten
 
 | ID | Severity | Observation | Evidence | Why it matters |
 |----|----------|-------------|----------|----------------|
-| O-01 | Needs Review | **Four product names in play:** WHIZUNIK COMMAND (UI), Insight Factor (backend/API/table), Adventra (domain/NOA/docs), and **Globalor (planned client per brief — zero code references)** | `frontend/src/routes/*` (WHIZUNIK COMMAND), `backend/src/middleware/auth.ts` (insight-factor issuer/audience), `deploy/nginx.conf` + `DEPLOY.md` (adventra), repo-wide search (no Globalor) | Brand confusion; every rebrand/onboarding touches code |
+| O-01 | Needs Review | **Four product names in play:** WHIZUNIK COMMAND (UI), Insight Factor (backend/API/table), Two Paths (domain/NOA/docs), and **Globalor (planned client per brief — zero code references)** | `frontend/src/routes/*` (WHIZUNIK COMMAND), `backend/src/middleware/auth.ts` (insight-factor issuer/audience), `deploy/nginx.conf` + `DEPLOY.md` (twopaths), repo-wide search (no Globalor) | Brand confusion; every rebrand/onboarding touches code |
 | O-02 | Needs Review | **Single production server** (Nginx + PM2 + one API instance) | `deploy/nginx.conf`, `ecosystem.config.cjs` | Single point of failure; no horizontal scaling path |
 | O-03 | Potential Architecture Concern | **Monolithic route file** (~5,300-line `routes/index.ts`) with inline handlers; business logic not separated into controllers/services for most modules | `backend/src/routes/index.ts` | Maintainability; testability; onboarding |
 | O-04 | Needs Review | **Forecast engine duplicated** verbatim in frontend and backend (only a "KEEP IN SYNC" comment guards it) | `frontend/src/lib/forecast-engine.ts`, `backend/src/lib/forecast-engine.ts` | Logic drift between display and server persistence |
@@ -523,8 +523,8 @@ Classification: **Normal / No Immediate Concern** · **Needs Review** · **Poten
 | O-07 | Needs Review | **Alert generation is manual/admin-triggered only**; S3 optional (uploads fail with HTTP 500 when `S3_BUCKET` is unset — no graceful degradation); SMTP optional (sends are skipped with a warning when unconfigured) | `backend/src/routes/index.ts` (alerts/generate, upload route), `backend/src/config.ts`, `backend/src/email.ts` (`isEmailConfigured`) | Risk monitoring depends on human action; partial feature degradation |
 | O-08 | Potential Architecture Concern | **No test runner, no CI/CD, no staging environment**; single test file not wired into scripts | `package.json` files, `frontend/src/lib/forecast-engine.tests.ts`, repo-wide search | Changes ship without automated verification |
 | O-09 | Needs Review | **In-memory rate limiting** (per-process) and single-table **scans** for admin/entity lists (`scanByType`) | `backend/src/middleware/rate-limit.ts`, `backend/src/dynamodb.ts` | Limits don't survive restart or multi-instance; scans cost reads |
-| O-10 | Needs Review | **Seed/demo scripts write to the configured (real) table** with Adventra/WHIZUNIK COMMAND demo data and personal emails | `backend/scripts/seed-*.ts` | Demo data may have leaked into production data |
-| O-11 | Needs Review | **Hard-coded client branding** in code (NOA "Adventra"; frontend brand strings) instead of configuration; **no feature flags** for optional modules | `backend/src/routes/index.ts` (send-noa), `frontend/src/routes/*` | Every tenant/brand change requires code edits; **Globalor onboarding would need code changes today** |
+| O-10 | Needs Review | **Seed/demo scripts write to the configured (real) table** with Two Paths/WHIZUNIK COMMAND demo data and personal emails | `backend/scripts/seed-*.ts` | Demo data may have leaked into production data |
+| O-11 | Needs Review | **Hard-coded client branding** in code (NOA "Two Paths"; frontend brand strings) instead of configuration; **no feature flags** for optional modules | `backend/src/routes/index.ts` (send-noa), `frontend/src/routes/*` | Every tenant/brand change requires code edits; **Globalor onboarding would need code changes today** |
 | O-12 | Needs Review | **Dual masters & duplicates:** Supplier vs legacy Vendor; two "PO" concepts; dual balance-sheet pages; dual invoice line structures; two frontend print/PDF pipelines | `backend/src/models/{supplier,vendor,purchase-order,goods-purchase-order,invoice}.ts`, `frontend/src/routes/app.{accounting,balance-sheet}.tsx` | Migration state/debt — triage needed (WH-TECH-01 D1–D10) |
 | O-13 | Unknown | **Runtime status of production** (live vs testing), hosting provider, Node version, real DynamoDB table name, S3 bucket, SMTP provider | repo-wide search (absent) | Cannot be verified from the repository |
 | O-14 | Normal | Single-table design with GSI1/GSI2 access patterns; conditional writes for atomic state transitions; origin-guarded CSRF + httpOnly cookies; magic-byte upload validation | `backend/src/dynamodb.ts`, `backend/src/middleware/security.ts`, `backend/src/middleware/auth.ts` | Sound foundations for current scale |
@@ -533,10 +533,10 @@ Classification: **Normal / No Immediate Concern** · **Needs Review** · **Poten
 
 ## 20. Items Requiring Sankalp Review
 
-1. **Q-1 — Product name & Globalor:** the product is rendered as **WHIZUNIK COMMAND** while backend/API/table use **Insight Factor** and deployment uses **Adventra**; the brief references **Globalor as a planned client** with zero code references. What is the official name, and is Globalor a client to onboard (timeline?) or a rebrand?
-2. **Q-2 — Branding strategy:** approve moving hard-coded brand strings ("Adventra" NOA, frontend brand text) into the per-client document template so future clients (incl. **Globalor**) need no code changes.
+1. **Q-1 — Product name & Globalor:** the product is rendered as **WHIZUNIK COMMAND** while backend/API/table use **Insight Factor** and deployment uses **Two Paths**; the brief references **Globalor as a planned client** with zero code references. What is the official name, and is Globalor a client to onboard (timeline?) or a rebrand?
+2. **Q-2 — Branding strategy:** approve moving hard-coded brand strings ("Two Paths" NOA, frontend brand text) into the per-client document template so future clients (incl. **Globalor**) need no code changes.
 3. **Q-3 — Deployment topology:** single-tenant per install vs multi-tenant shared (per `clientId`) vs per-client forks — decides how client-specific items become configurable.
-4. **Q-4 — Adventra status:** live production tenant, demo, or seed client?
+4. **Q-4 — Two Paths status:** live production tenant, demo, or seed client?
 5. **Q-5 — Production status:** which modules are Live/Testing/Development (not verifiable from repo).
 6. **Q-6 — Forecasting & pricing engine:** flagship CORE differentiator or OPTIONAL MODULE?
 7. **Q-7 — Alert automation & accounting depth:** automated alert generation? auto-posting journals vs manual-only?
@@ -577,8 +577,8 @@ Classification: **Normal / No Immediate Concern** · **Needs Review** · **Poten
 
 ## Sankalp Architecture Review Agenda
 
-1. **Naming & identity** (Q-1/Q-2): WHIZUNIK COMMAND vs Insight Factor vs Adventra vs **planned Globalor** — official name; branding strategy for future clients.
-2. **Topology** (Q-3/Q-4/Q-13): single-tenant vs multi-tenant; Adventra's status; cross-client dashboard visibility.
+1. **Naming & identity** (Q-1/Q-2): WHIZUNIK COMMAND vs Insight Factor vs Two Paths vs **planned Globalor** — official name; branding strategy for future clients.
+2. **Topology** (Q-3/Q-4/Q-13): single-tenant vs multi-tenant; Two Paths's status; cross-client dashboard visibility.
 3. **Production state** (Q-5, §21 unknowns): what is actually live; hosting/SMTP/table/bucket details.
 4. **Product positioning** (Q-6): forecasting/pricing engine as core differentiator.
 5. **Operational gaps** (Q-7/Q-11/Q-12): alert automation, journal auto-posting, seed-script hygiene, staging/CI/tests.

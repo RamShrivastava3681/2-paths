@@ -1,13 +1,13 @@
-// Adventra platform walkthrough deck — 12 slides
-// Run: node generate.cjs  →  outputs ../Adventra-Platform-Walkthrough.pptx
+// Two Paths platform walkthrough deck — 12 slides
+// Run: node generate.cjs  →  outputs ../TwoPaths-Platform-Walkthrough.pptx
 const PptxGenJS = require("pptxgenjs");
 
 const pptx = new PptxGenJS();
 pptx.defineLayout({ name: "WIDE", width: 13.333, height: 7.5 });
 pptx.layout = "WIDE";
-pptx.author = "Adventra";
-pptx.company = "Adventra";
-pptx.title = "Adventra — Receivables Factoring & Monitoring Platform";
+pptx.author = "Two Paths";
+pptx.company = "Two Paths";
+pptx.title = "Two Paths — Receivables Factoring & Monitoring Platform";
 pptx.subject = "12-slide platform walkthrough";
 pptx.theme = { headFontFace: "Segoe UI", bodyFontFace: "Segoe UI", lang: "en-US" };
 
@@ -64,7 +64,7 @@ function deco(s, num, opts = {}) {
     fill: { color: opts.dark ? C.blue : C.blueSoft }, line: { type: "none" },
   });
   if (!opts.dark) {
-    tx(s, "Adventra — Receivables Factoring & Monitoring", {
+    tx(s, "Two Paths — Receivables Factoring & Monitoring", {
       x: 0.55, y: H - 0.42, w: 7, h: 0.28,
       fontSize: 8.5, color: C.muted, charSpacing: 0.6,
     });
@@ -73,7 +73,7 @@ function deco(s, num, opts = {}) {
       fontSize: 8.5, color: C.muted, align: "right",
     });
   } else {
-    tx(s, "Adventra · v2.4", {
+    tx(s, "Two Paths · v2.4", {
       x: 0.55, y: H - 0.42, w: 4, h: 0.28,
       fontSize: 8.5, color: "8FA3C4",
     });
@@ -248,7 +248,7 @@ function chip(s, { x, y, w, h = 0.36, text, sub, fill = C.card, border = C.line,
     x: 0.85, y: 1.0, w: 11.6, h: 0.34,
     fontSize: 13, color: C.cyan, bold: true, charSpacing: 3,
   });
-  tx(s, "Adventra", {
+  tx(s, "Two Paths", {
     x: 0.82, y: 1.38, w: 11.6, h: 1.5,
     fontSize: 72, color: "FFFFFF", bold: true,
   });
@@ -286,7 +286,7 @@ function chip(s, { x, y, w, h = 0.36, text, sub, fill = C.card, border = C.line,
     });
   });
   s.addNotes(
-    "Title slide. Adventra combines invoice factoring with institutional-grade debtor monitoring. The stat strip is the platform's own landing-page hero: ₹2.4B advanced in 2025, 11 hours median time to fund, 0.42% trailing loss rate, 98.7% collection rate."
+    "Title slide. Two Paths combines invoice factoring with institutional-grade debtor monitoring. The stat strip is the platform's own landing-page hero: ₹2.4B advanced in 2025, 11 hours median time to fund, 0.42% trailing loss rate, 98.7% collection rate."
   );
 }
 
@@ -944,7 +944,7 @@ function chip(s, { x, y, w, h = 0.36, text, sub, fill = C.card, border = C.line,
 }
 
 // ── Write file ──────────────────────────────────────────────────
-const outPath = require("path").join(__dirname, "..", "Adventra-Platform-Walkthrough.pptx");
+const outPath = require("path").join(__dirname, "..", "TwoPaths-Platform-Walkthrough.pptx");
 pptx
   .writeFile({ fileName: outPath })
   .then((fn) => console.log("Saved:", fn))

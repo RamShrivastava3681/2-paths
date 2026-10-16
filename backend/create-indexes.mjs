@@ -1,4 +1,4 @@
-// Script to create GSI1 and GSI2 indexes on the DynamoDB "adventra" table
+// Script to create GSI1 and GSI2 indexes on the DynamoDB table
 // Run with: node create-indexes.mjs
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
@@ -20,7 +20,7 @@ for (const line of envFile.split("\n")) {
 }
 
 const region = env.AWS_REGION || "ap-south-1";
-const tableName = env.DYNAMODB_TABLE || "adventra";
+const tableName = env.DYNAMODB_TABLE || "2-paths-table";
 const accessKeyId = env.AWS_ACCESS_KEY_ID;
 const secretAccessKey = env.AWS_SECRET_ACCESS_KEY;
 

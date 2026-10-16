@@ -5,14 +5,14 @@
 // Start:         pm2 start ecosystem.config.cjs
 // View status:   pm2 status
 // View logs:     pm2 logs
-// Restart:       pm2 restart adventra-backend
+// Restart:       pm2 restart twopaths-backend
 // Stop:          pm2 stop ecosystem.config.cjs
 // ────────────────────────────────────────────────────────────────────────────
 
 module.exports = {
   apps: [
     {
-      name: "adventra-backend",
+      name: "twopaths-backend",
       cwd: "./backend",
       script: "./dist/server.js",
       interpreter: "node",

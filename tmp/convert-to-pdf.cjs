@@ -11,8 +11,8 @@ const fs = require('fs');
 
   const page = await browser.newPage();
 
-  const htmlPath = path.resolve(__dirname, '..', 'Adventra-Platform-Documentation.html');
-  const pdfPath = path.resolve(__dirname, '..', 'Adventra-Platform-Documentation.pdf');
+  const htmlPath = path.resolve(__dirname, '..', 'TwoPaths-Platform-Documentation.html');
+  const pdfPath = path.resolve(__dirname, '..', 'TwoPaths-Platform-Documentation.pdf');
 
   const htmlContent = fs.readFileSync(htmlPath, 'utf-8');
   await page.setContent(htmlContent, { waitUntil: 'networkidle0' });

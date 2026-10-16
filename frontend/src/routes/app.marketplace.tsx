@@ -117,7 +117,7 @@ export default function MarketplaceHubPage() {
   const [mappingSearch, setMappingSearch] = useState("");
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
-  const [mapTargetSku, setMapTargetSku] = useState("AD-TS-WHT-M");
+  const [mapTargetSku, setMapTargetSku] = useState("TP-TS-WHT-M");
 
   const handleSelectRole = (roleId: string) => {
     setState((prev) => ({ ...prev, selectedRole: roleId as any }));
@@ -168,7 +168,7 @@ export default function MarketplaceHubPage() {
   const displayGmv = currentChannelView ? currentChannelView.grossValue : totalGmv;
   const displayReturns = currentChannelView ? currentChannelView.returns : totalReturns;
 
-  // Real-time checkpoints for Main SKU (AD-TS-BLK-M)
+  // Real-time checkpoints for Main SKU (TP-TS-BLK-M)
   const ledgerCheckpoints = getLedgerCheckpoints(state.currentStep);
 
   // Workflow Handlers
@@ -194,7 +194,7 @@ export default function MarketplaceHubPage() {
           externalOrderId: state.externalOrderId,
           eventId: state.eventId,
           channelSku: "AMZ-TS-BLK-M",
-          whizunikSku: "AD-TS-BLK-M",
+          whizunikSku: "TP-TS-BLK-M",
           quantity: 2,
           unitPrice: 1000,
         });
@@ -305,7 +305,7 @@ export default function MarketplaceHubPage() {
               ...m,
               whizunikSku: mapTargetSku,
               status: "Mapped",
-              productName: "Adventra Classic Tee",
+              productName: "Two Paths Classic Tee",
               variant: "White / M",
             }
           : m
@@ -363,7 +363,7 @@ export default function MarketplaceHubPage() {
               DEMO • SIMULATED DATA • NO LIVE CONNECTIONS
             </span>
             <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-medium">
-              WhizUnik Marketplace Integration Flow Demonstration for <strong>Adventra</strong>
+              WhizUnik Marketplace Integration Flow Demonstration for <strong>Two Paths</strong>
             </span>
           </div>
 
@@ -619,7 +619,7 @@ export default function MarketplaceHubPage() {
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Target SKU: <strong className="font-mono text-slate-700 dark:text-slate-200">AD-TS-BLK-M</strong> (Black Tee M) • Quantity: <strong>2 Units</strong> @ ₹1,000 = ₹2,000
+                Target SKU: <strong className="font-mono text-slate-700 dark:text-slate-200">TP-TS-BLK-M</strong> (Black Tee M) • Quantity: <strong>2 Units</strong> @ ₹1,000 = ₹2,000
               </p>
             </div>
 
@@ -890,7 +890,7 @@ export default function MarketplaceHubPage() {
                 </span>
                 <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
                   Target SKU Stock Ledger Checkpoints:{" "}
-                  <span className="font-mono text-indigo-600 dark:text-indigo-400">AD-TS-BLK-M</span>
+                  <span className="font-mono text-indigo-600 dark:text-indigo-400">TP-TS-BLK-M</span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   Available = On-hand − Reserved − QC hold. Evaluated in real time from workflow actions.
@@ -961,11 +961,11 @@ export default function MarketplaceHubPage() {
             </div>
           </div>
 
-          {/* Section 2: All 6 Seeded Adventra SKUs Inventory Table */}
+          {/* Section 2: All 6 Seeded Two Paths SKUs Inventory Table */}
           <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-4">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                Seeded Adventra Catalogue & Stock (Warehouse: WH-DEMO)
+                Seeded Two Paths Catalogue & Stock (Warehouse: WH-DEMO)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 All channel SKUs point to one central WhizUnik inventory record. No duplicates created.
@@ -990,7 +990,7 @@ export default function MarketplaceHubPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                   {state.inventory.map((inv) => {
-                    const isMainSku = inv.whizunikSku === "AD-TS-BLK-M";
+                    const isMainSku = inv.whizunikSku === "TP-TS-BLK-M";
                     // compute active stock based on workflow step
                     const onHand = isMainSku
                       ? state.currentStep >= 7
@@ -1551,7 +1551,7 @@ export default function MarketplaceHubPage() {
               <div className="grid grid-cols-2 gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-850">
                 <div>
                   <span className="text-slate-400 block text-[10px]">Seller</span>
-                  <strong className="text-slate-800 dark:text-slate-200">WhizUnik / Adventra Lifestyle Pvt Ltd</strong>
+                  <strong className="text-slate-800 dark:text-slate-200">WhizUnik / Two Paths Lifestyle Pvt Ltd</strong>
                   <p className="text-[11px] text-slate-500">GSTIN: 29AAAAA0000A1Z5</p>
                 </div>
                 <div>
@@ -1574,7 +1574,7 @@ export default function MarketplaceHubPage() {
                   </thead>
                   <tbody>
                     <tr className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="p-2">Adventra Classic Tee (Black - M) [AD-TS-BLK-M]</td>
+                      <td className="p-2">Two Paths Classic Tee (Black - M) [TP-TS-BLK-M]</td>
                       <td className="p-2 font-mono">61091000</td>
                       <td className="p-2 text-right font-mono">2</td>
                       <td className="p-2 text-right font-mono">₹1,000.00</td>
@@ -1637,7 +1637,7 @@ export default function MarketplaceHubPage() {
 
             <div className="space-y-3 text-xs">
               <p className="text-slate-600 dark:text-slate-300">
-                Select the destination WhizUnik child SKU to bind <code>AMZ-UNKNOWN</code>. Per Section 8 exception script, map to <strong>AD-TS-WHT-M</strong>:
+                Select the destination WhizUnik child SKU to bind <code>AMZ-UNKNOWN</code>. Per Section 8 exception script, map to <strong>TP-TS-WHT-M</strong>:
               </p>
 
               <div>
@@ -1649,9 +1649,9 @@ export default function MarketplaceHubPage() {
                   onChange={(e) => setMapTargetSku(e.target.value)}
                   className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-850 font-mono text-xs font-semibold focus:outline-hidden"
                 >
-                  <option value="AD-TS-WHT-M">AD-TS-WHT-M (White Tee M - 18 On-hand)</option>
-                  <option value="AD-TS-BLK-L">AD-TS-BLK-L (Black Tee L - 15 On-hand)</option>
-                  <option value="AD-PO-NVY-M">AD-PO-NVY-M (Navy Polo M - 10 On-hand)</option>
+                  <option value="TP-TS-WHT-M">TP-TS-WHT-M (White Tee M - 18 On-hand)</option>
+                  <option value="TP-TS-BLK-L">TP-TS-BLK-L (Black Tee L - 15 On-hand)</option>
+                  <option value="TP-PO-NVY-M">TP-PO-NVY-M (Navy Polo M - 10 On-hand)</option>
                 </select>
               </div>
 

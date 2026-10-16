@@ -1,5 +1,5 @@
 # UI Prompt — Sidebar, Tabs, Warehouse Tab & Workbenches
-### Whizunik Command (Adventra Platform) — UI-only, build-ready spec
+### Whizunik Command (Two Paths Platform) — UI-only, build-ready spec
 
 Use this document as a single copy-paste prompt for an AI UI builder / frontend agent.
 It describes **only UI + interaction**. No backend, no API, no business-logic changes.

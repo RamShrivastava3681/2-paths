@@ -2,9 +2,9 @@
 
 Generates three decks (in the project root):
 
-- `Adventra-Platform-Walkthrough.pptx` — a 12-slide product walkthrough, matching the
+- `TwoPaths-Platform-Walkthrough.pptx` — a 12-slide product walkthrough, matching the
   prompt in `../PPT-PROMPT.md` (`generate.cjs`).
-- `Adventra-Architecture-Workflows.pptx` — a 20-slide technical deck of **architecture &
+- `TwoPaths-Architecture-Workflows.pptx` — a 20-slide technical deck of **architecture &
   workflow diagrams**, drawn from `../TECH-STACK-AND-QUESTIONS.md` and
   `../COMPLETE-WORKFLOW-GUIDE.md` (`generate-diagrams.cjs`).
 - `whizunik-booklet-premium.pptx` — the WhizUnik premium booklet (12 slides),
@@ -24,7 +24,7 @@ npm run generate:diagrams # architecture & workflow diagrams deck
 npm run generate:whizunik # WhizUnik premium booklet
 ```
 
-Output: `../Adventra-Platform-Walkthrough.pptx`, `../Adventra-Architecture-Workflows.pptx`,
+Output: `../TwoPaths-Platform-Walkthrough.pptx`, `../TwoPaths-Architecture-Workflows.pptx`,
 `../whizunik-booklet-premium.pptx`
 
 ## Structure

@@ -1,6 +1,6 @@
 # Git Changes — 10 September 2026
 
-**Repository:** adventra-platform
+**Repository:** two-paths-platform
 **Date covered:** 10 September 2026 (00:00:00 to 23:59:59, +0530 IST)
 **Author (all commits):** RamShrivastava3681 <ramshrivastava304@gmail.com>
 **Total commits:** 10
@@ -200,7 +200,7 @@ This document lists every commit from 10 September 2026 in chronological order, 
 - `backend/src/lib/document-pdf.ts` (+5/-3)
 
 **Code changes (exact diff in `buildSalesOrderTallyPdf`):**
-- Logo cell background: `doc.rect(...).fill("#111111")` → `fill(TALLY.white)` with comment “White background: the Adventra logo asset is a dark mark on transparency, so it needs a light cell to stay visible.”
+- Logo cell background: `doc.rect(...).fill("#111111")` → `fill(TALLY.white)` with comment “White background: the Two Paths logo asset is a dark mark on transparency, so it needs a light cell to stay visible.”
 - Fallback text color: `fillColor("#FFFFFF")` → `fillColor(TALLY.ink)` in both `catch` and `else` branches.
 - Fallback text: `sel.name` → `sel.name || " "` (avoids PDFKit error on empty string).
 - Keeps border stroke `TALLY.ink`, `logoH = max(64, leftH - rightRowsH)` logic unchanged.

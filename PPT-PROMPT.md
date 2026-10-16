@@ -1,4 +1,4 @@
-# Adventra — 12-Slide PowerPoint Prompt
+# Two Paths — 12-Slide PowerPoint Prompt
 
 > **How to use:** Copy everything from the divider line below into your presentation AI tool
 > (Gamma, Tome, Microsoft Copilot in PowerPoint, Canva Magic Design, or ChatGPT with a deck
@@ -8,8 +8,8 @@
 ---
 
 ```
-Create a 12-slide professional presentation titled "Adventra — Turn Receivables into Working
-Capital", a product walkthrough of the Adventra platform (a receivables-factoring and debtor-
+Create a 12-slide professional presentation titled "Two Paths — Turn Receivables into Working
+Capital", a product walkthrough of the Two Paths platform (a receivables-factoring and debtor-
 monitoring SaaS). Audience: prospective clients and investors. Tone: confident, financial,
 clean. Visual style: modern fintech — dark navy/white background, electric blue (#0066FF) and
 cyan (#00B8FF) accents, generous whitespace, cards, and simple line icons. Use the lucide icon
@@ -21,7 +21,7 @@ showcase: give them the most visual detail.
 ────────────────────────────────────────────
 SLIDE 1 — TITLE
 ────────────────────────────────────────────
-Headline: "Adventra — Receivables Factoring & Monitoring Platform"
+Headline: "Two Paths — Receivables Factoring & Monitoring Platform"
 Subtitle: "Turn outstanding invoices into working capital — without losing sight of risk."
 Bullets:
 • Institutional-grade invoice factoring combined with real-time debtor monitoring
