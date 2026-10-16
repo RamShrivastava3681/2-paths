@@ -1327,6 +1327,15 @@ export async function decideInspection(data: {
   const item = (all as QualityInspection[]).find((i) => i.id === data.id && i.clientId === data.clientId);
   if (!item) throw Object.assign(new Error("Not found"), { statusCode: 404 });
   if (!["pending", "hold", "released", "rework"].includes(data.outcome)) throw new Error("Invalid outcome");
+  // No silent edits to a released decision: a released inspection may only
+  // receive further (capped, additive) partial releases. Hold/rework after a
+  // release requires a NEW inspection so both decisions stay in history.
+  if (item.outcome === "released" && data.outcome !== "released") {
+    throw Object.assign(
+      new Error("Inspection already released — record a new inspection for hold/rework"),
+      { statusCode: 409, code: "INSPECTION_ALREADY_RELEASED" }
+    );
+  }
   const b = await getBatch(item.batchId);
   if (!b) throw Object.assign(new Error("Batch not found"), { statusCode: 404 });
   const now = db.nowISO();

@@ -116,6 +116,7 @@ router.post("/manufacturing-batches/:id/complete", async (req, res) => {
 // rejected / cancelled. Guards (materials ready, quality released) enforced.
 router.post("/manufacturing-batches/:id/transition", async (req, res) => {
   try {
+    if (!(await requireOps(req, res))) return;
     const to = req.body?.status;
     if (typeof to !== "string") return res.status(400).json({ error: "status is required" });
     const fresh = await Mfg.transitionBatch(
@@ -171,6 +172,7 @@ router.get("/material-reservations", async (req, res) => {
 
 router.post("/material-reservations", async (req, res) => {
   try {
+    if (!(await requireOps(req, res))) return;
     const qty = Number(req.body?.qty);
     const item = await Mfg.reserveMaterial({
       clientId: req.user!.userId,
@@ -190,6 +192,7 @@ router.post("/material-reservations", async (req, res) => {
 
 router.post("/material-reservations/:id/release", async (req, res) => {
   try {
+    if (!(await requireOps(req, res))) return;
     const item = await Mfg.releaseReservation(req.params.id, req.user!.userId, !!req.body?.consumed);
     if (!item) return res.status(404).json({ error: "Not found" });
     res.json(item);
@@ -210,6 +213,29 @@ async function requireQuality(req: any, res: any): Promise<boolean> {
     return false;
   }
   return true;
+}
+
+// Operations gate: restart authority, reservations, issues, updates and
+// handoffs are supervisor-level writes. Reads stay open to all authed users;
+// sales_rep / client roles are read-only on these endpoints.
+const OPS_ROLES = ["operations", "factor_admin", "super_admin"];
+
+async function requireOps(req: any, res: any): Promise<boolean> {
+  const roles: string[] = req.user!.roles || [];
+  if (!OPS_ROLES.some((r) => roles.includes(r))) {
+    res.status(403).json({ error: "Requires an operations supervisor role (operations, factor_admin, super_admin)" });
+    return false;
+  }
+  return true;
+}
+
+async function requireOpsOrQuality(req: any, res: any): Promise<boolean> {
+  const roles: string[] = req.user!.roles || [];
+  if (OPS_ROLES.some((r) => roles.includes(r))) return true;
+  const cfg = await Mfg.getConfig(req.user!.userId);
+  if (cfg.qualityRoles.some((r) => roles.includes(r))) return true;
+  res.status(403).json({ error: "Requires an operations or quality role" });
+  return false;
 }
 
 async function transitionQuality(
@@ -309,6 +335,7 @@ router.get("/production-updates", async (req, res) => {
 
 router.post("/production-updates", async (req, res) => {
   try {
+    if (!(await requireOps(req, res))) return;
     const { update, duplicate } = await Mfg.recordUpdate({
       clientId: req.user!.userId,
       batchId: req.body?.batchId,
@@ -345,6 +372,7 @@ router.get("/material-issues", async (req, res) => {
 
 router.post("/material-issues", async (req, res) => {
   try {
+    if (!(await requireOps(req, res))) return;
     const { issue, duplicate } = await Mfg.issueMaterial({
       clientId: req.user!.userId,
       batchId: req.body?.batchId,
@@ -378,6 +406,7 @@ router.get("/factory-issues", async (req, res) => {
 
 router.post("/factory-issues", async (req, res) => {
   try {
+    if (!(await requireOps(req, res))) return;
     const issue = await Mfg.createIssue({
       clientId: req.user!.userId,
       type: req.body?.type,
@@ -401,6 +430,7 @@ router.post("/factory-issues", async (req, res) => {
 
 router.post("/factory-issues/:id/close", async (req, res) => {
   try {
+    if (!(await requireOps(req, res))) return;
     const closed = await Mfg.closeIssue(req.params.id, req.user!.userId, req.user!.userId);
     if (!closed) return res.status(404).json({ error: "Not found" });
     res.json(closed);
@@ -412,6 +442,7 @@ router.post("/factory-issues/:id/close", async (req, res) => {
 // Step 11 lifecycle: Open → Assigned → In Progress → Resolved → Closed.
 router.post("/factory-issues/:id/status", async (req, res) => {
   try {
+    if (!(await requireOps(req, res))) return;
     const to = req.body?.status;
     if (!["open", "assigned", "in_progress", "resolved", "closed"].includes(to)) {
       return res.status(400).json({ error: "status must be open | assigned | in_progress | resolved | closed" });
@@ -488,6 +519,7 @@ router.get("/quality-inspections", async (req, res) => {
 
 router.post("/quality-inspections", async (req, res) => {
   try {
+    if (!(await requireOpsOrQuality(req, res))) return;
     const item = await Mfg.createInspection({
       clientId: req.user!.userId,
       batchId: req.body?.batchId,
@@ -540,6 +572,7 @@ router.get("/corrective-actions", async (req, res) => {
 
 router.post("/corrective-actions", async (req, res) => {
   try {
+    if (!(await requireOpsOrQuality(req, res))) return;
     const item = await Mfg.createCorrectiveAction({
       clientId: req.user!.userId,
       batchId: req.body?.batchId ?? null,
@@ -559,6 +592,7 @@ router.post("/corrective-actions", async (req, res) => {
 
 router.post("/corrective-actions/:id/status", async (req, res) => {
   try {
+    if (!(await requireOpsOrQuality(req, res))) return;
     const item = await Mfg.transitionCorrectiveAction(
       req.params.id,
       req.user!.userId,
@@ -589,6 +623,7 @@ router.get("/accounting-handoffs", async (req, res) => {
 
 router.post("/accounting-handoffs", async (req, res) => {
   try {
+    if (!(await requireOps(req, res))) return;
     const { handoff, duplicate } = await Mfg.prepareHandoff({
       clientId: req.user!.userId,
       kind: req.body?.kind,
@@ -612,6 +647,7 @@ router.post("/accounting-handoffs", async (req, res) => {
 // fail-then-retry demo; production retries omit it.
 router.post("/accounting-handoffs/:id/send", async (req, res) => {
   try {
+    if (!(await requireOps(req, res))) return;
     const item = await Mfg.sendHandoff(req.params.id, req.user!.userId, req.user!.userId, {
       forceFail: !!req.body?.forceFail,
       failReason: req.body?.failReason,
@@ -625,6 +661,7 @@ router.post("/accounting-handoffs/:id/send", async (req, res) => {
 
 router.post("/accounting-handoffs/:id/cancel", async (req, res) => {
   try {
+    if (!(await requireOps(req, res))) return;
     const item = await Mfg.cancelHandoff(req.params.id, req.user!.userId, req.user!.userId);
     if (!item) return res.status(404).json({ error: "Not found" });
     res.json(item);

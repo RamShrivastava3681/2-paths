@@ -43,27 +43,27 @@ export function OverviewTab({ onGoto }: { onGoto: (tab: string, filter?: string)
   const activity: any[] = Array.isArray(d.activity) ? d.activity : [];
   const pipeline: any[] = Array.isArray(d.pipeline) ? d.pipeline : [];
 
-  const kpis: Array<{ label: string; key: string; tab: string; tone?: string }> = [
+  const kpis: Array<{ label: string; key: string; tab: string; filter?: string; tone?: string }> = [
     { label: "Open batches", key: "openBatches", tab: "batches" },
     { label: "Material shortages", key: "materialShortages", tab: "materials", tone: (k.materialShortages ?? 0) > 0 ? "text-red-600" : undefined },
     { label: "Good output", key: "goodOutput", tab: "batches" },
     { label: "Rejects", key: "rejects", tab: "batches" },
-    { label: "Open issues", key: "openIssues", tab: "issues", tone: (k.openIssues ?? 0) > 0 ? "text-amber-600" : undefined },
-    { label: "Overdue issues", key: "overdueIssues", tab: "issues", tone: (k.overdueIssues ?? 0) > 0 ? "text-red-600" : undefined },
+    { label: "Open issues", key: "openIssues", tab: "issues", filter: "open", tone: (k.openIssues ?? 0) > 0 ? "text-amber-600" : undefined },
+    { label: "Overdue issues", key: "overdueIssues", tab: "issues", filter: "overdue", tone: (k.overdueIssues ?? 0) > 0 ? "text-red-600" : undefined },
     { label: "Held / pending qty", key: "heldPendingQty", tab: "quality", tone: (k.heldPendingQty ?? 0) > 0 ? "text-amber-600" : undefined },
     { label: "Awaiting review", key: "awaitingReview", tab: "quality", tone: (k.awaitingReview ?? 0) > 0 ? "text-amber-600" : undefined },
     { label: "Released stock", key: "releasedStock", tab: "dispatch", tone: "text-emerald-600" },
     { label: "Ready for dispatch", key: "readyDispatch", tab: "dispatch" },
-    { label: "Pending handoffs", key: "pendingHandoffs", tab: "tally" },
-    { label: "Failed handoffs", key: "failedHandoffs", tab: "tally", tone: (k.failedHandoffs ?? 0) > 0 ? "text-red-600" : undefined },
-    { label: "Orders at risk", key: "atRiskOrders", tab: "batches", tone: (k.atRiskOrders ?? 0) > 0 ? "text-red-600" : undefined },
+    { label: "Pending handoffs", key: "pendingHandoffs", tab: "tally", filter: "status:pending" },
+    { label: "Failed handoffs", key: "failedHandoffs", tab: "tally", filter: "status:failed", tone: (k.failedHandoffs ?? 0) > 0 ? "text-red-600" : undefined },
+    { label: "Orders at risk", key: "atRiskOrders", tab: "batches", filter: "atrisk", tone: (k.atRiskOrders ?? 0) > 0 ? "text-red-600" : undefined },
   ];
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
         {kpis.map((c) => (
-          <KpiCard key={c.label} label={c.label} value={fmtNum(k[c.key])} tone={c.tone} onClick={() => onGoto(c.tab)} />
+          <KpiCard key={c.label} label={c.label} value={fmtNum(k[c.key])} tone={c.tone} onClick={() => onGoto(c.tab, c.filter)} />
         ))}
       </div>
 

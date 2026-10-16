@@ -90,6 +90,9 @@ export function WorkflowStepper({ steps, onSelect }: { steps: FlowStep[]; onSele
 }
 
 export function BatchHeadline({ b }: { b: any }) {
+  const hist: any[] = Array.isArray(b.statusHistory) ? b.statusHistory : [];
+  const last = hist[hist.length - 1];
+  const avail = Number(b.availableQty ?? 0);
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
       <MfgBadge value={b.status} prefix="Production" />
@@ -97,11 +100,22 @@ export function BatchHeadline({ b }: { b: any }) {
       <MfgBadge value={b.materialStatus ?? "blocked"} prefix="Materials" />
       <span className="text-muted-foreground">
         Target {b.targetQty} · Good {b.producedGoodQty} · Rejects {b.rejectedQty}
-        {b.reworkQty ? ` · Rework ${b.reworkQty}` : ""} · Released {b.releasedQty} · Available {b.availableQty ?? 0}
+        {b.reworkQty ? ` · Rework ${b.reworkQty}` : ""} · Released {b.releasedQty}
+      </span>
+      <span
+        title="Available = released − allocated (only while Released)"
+        className={`rounded-md px-1.5 py-0.5 font-mono font-bold ${avail > 0 ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"}`}
+      >
+        Available {avail}
       </span>
       {b.salesOrderNumber && <span className="text-muted-foreground">· Order {b.salesOrderNumber}</span>}
       {b.lineName && <span className="text-muted-foreground">· {b.lineName}</span>}
       {b.deliveryDate && <span className="text-muted-foreground">· Due {String(b.deliveryDate).slice(0, 10)}</span>}
+      {last && (
+        <span className="text-muted-foreground" title={`${last.from} → ${last.to}${last.notes ? ` — ${last.notes}` : ""}`}>
+          · Updated by {String(last.by ?? "—").slice(0, 8)} · {String(last.at ?? "").slice(0, 16).replace("T", " ")}
+        </span>
+      )}
     </div>
   );
 }

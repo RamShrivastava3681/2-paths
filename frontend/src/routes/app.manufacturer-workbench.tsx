@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Factory, Plus } from "lucide-react";
 import api from "@/lib/api-client";
-import { PageHeader, Card, EmptyState, StatusPill, fmtDate } from "@/components/ledger-ui";
+import { PageHeader, Card, EmptyState, fmtDate } from "@/components/ledger-ui";
 import { OverviewTab, OverviewHeader } from "@/components/manufacture/overview-tab";
 import { MaterialsTab } from "@/components/manufacture/materials-tab";
 import { QualityTab } from "@/components/manufacture/quality-tab";
@@ -78,7 +78,7 @@ function ManufacturerWorkbenchPage() {
       {tab === "issues" && <IssuesTab filter={tabFilter} onChanged={refresh} />}
       {tab === "quality" && <QualityTab filter={tabFilter} />}
       {tab === "dispatch" && <DispatchTab filter={tabFilter} />}
-      {tab === "tally" && <TallyTab />}
+      {tab === "tally" && <TallyTab filter={tabFilter} />}
 
       <Card title="Reused trading flows">
         <div className="flex flex-wrap gap-2 text-xs">
@@ -122,16 +122,21 @@ function BatchesTab({ filter, onChanged }: { filter?: string; onChanged: () => v
     retry: false,
   });
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(filter ?? null);
-  const [search, setSearch] = useState(filter ?? "");
-  const [statusF, setStatusF] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(filter && !filter.includes(":") && filter !== "atrisk" ? filter : null);
+  const [search, setSearch] = useState(filter && !filter.includes(":") && filter !== "atrisk" ? filter : "");
+  const [statusF, setStatusF] = useState(filter && filter.startsWith("status:") ? filter.slice(7) : "");
   const [lineF, setLineF] = useState("");
+  const [atRiskOnly, setAtRiskOnly] = useState(filter === "atrisk");
 
   const batches: any[] = Array.isArray(batchesQ.data) ? batchesQ.data : [];
   const lines = useMemo(() => [...new Set(batches.map((b) => b.lineName).filter(Boolean))], [batches]);
   const filtered = batches.filter((b) => {
     if (statusF && b.status !== statusF) return false;
     if (lineF && b.lineName !== lineF) return false;
+    if (atRiskOnly) {
+      if (["released", "closed", "cancelled", "rejected"].includes(b.status) || !b.deliveryDate) return false;
+      if (new Date(b.deliveryDate).getTime() - Date.now() >= 7 * 86400000) return false;
+    }
     if (search) {
       const q = search.toLowerCase();
       const hay = `${b.batchNumber} ${b.productName ?? ""} ${b.sku ?? ""} ${b.salesOrderNumber ?? ""} ${b.supervisor ?? ""}`.toLowerCase();
@@ -155,6 +160,10 @@ function BatchesTab({ filter, onChanged }: { filter?: string; onChanged: () => v
           <option value="">All lines</option>
           {lines.map((l: string) => <option key={l} value={l}>{l}</option>)}
         </select>
+        <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+          <input type="checkbox" checked={atRiskOnly} onChange={(e) => setAtRiskOnly(e.target.checked)} className="h-3.5 w-3.5" />
+          At risk only
+        </label>
         <button onClick={() => setShowCreate((s) => !s)} className={`${BTN_PRIMARY} ml-auto !px-4 !py-2`}>
           <Plus className="mr-1 inline h-4 w-4" /> New batch
         </button>
@@ -257,6 +266,10 @@ function BatchDetail({ batchId, onChanged }: { batchId: string; onChanged: () =>
   return (
     <div className="mt-4 space-y-4 border-t border-border pt-4">
       <WorkflowStepper steps={stepsForBatch(b, readinessQ.data)} />
+      <p className="rounded-lg bg-muted/60 px-3 py-1.5 text-[11px] text-muted-foreground" title="Dispatch decrements Trading stock; batch allocatedQty is the link and never rewrites released history.">
+        Reconciliation: produced ({fmtNum((b.producedGoodQty ?? 0) + (b.rejectedQty ?? 0) + (b.reworkQty ?? 0))}) = good ({fmtNum(b.producedGoodQty)}) + rejected ({fmtNum(b.rejectedQty)}) + rework ({fmtNum(b.reworkQty ?? 0)}) ·
+        available ({fmtNum(b.availableQty ?? 0)}) = released ({fmtNum(b.releasedQty)}) − allocated ({fmtNum(b.allocatedQty)}), visible only while Released.
+      </p>
 
       {linkedIssues.length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs">
@@ -383,7 +396,9 @@ function IssuesTab({ filter, onChanged }: { filter?: string; onChanged: () => vo
   const [form, setForm] = useState({ type: "stoppage", title: "", owner: "", lineName: "", batchId: "", severity: "medium", expectedResolutionAt: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [statusF, setStatusF] = useState("");
+  const [statusF, setStatusF] = useState(filter && filter.startsWith("status:") ? filter.slice(7) : "");
+  const [overdueOnly, setOverdueOnly] = useState(filter === "overdue");
+  const [openOnly, setOpenOnly] = useState(filter === "open");
   const [msg, setMsg] = useState<string | null>(null);
 
   const submit = async () => {
@@ -408,8 +423,13 @@ function IssuesTab({ filter, onChanged }: { filter?: string; onChanged: () => vo
   if (issuesQ.isError) return <EmptyState title="Issues unavailable" description="Could not load factory issues." />;
   const issues: any[] = Array.isArray(issuesQ.data) ? issuesQ.data : [];
   const batches: any[] = Array.isArray(batchesQ.data) ? batchesQ.data : [];
-  const shown = issues.filter((i) => (!statusF || i.status === statusF) && (!filter || i.id === filter || i.affectedBatchId === filter));
   const isOverdue = (i: any) => i.status !== "closed" && i.expectedResolutionAt && new Date(i.expectedResolutionAt).getTime() < Date.now();
+  const shown = issues.filter((i) =>
+    (!statusF || i.status === statusF) &&
+    (!overdueOnly || isOverdue(i)) &&
+    (!openOnly || i.status !== "closed") &&
+    (!filter || filter === "open" || filter === "overdue" || filter.startsWith("status:") || i.id === filter || i.affectedBatchId === filter)
+  );
   const NEXT_I: Record<string, string[]> = { open: ["assigned", "closed"], assigned: ["in_progress", "closed"], in_progress: ["resolved", "closed"], resolved: ["closed", "in_progress"], closed: [] };
 
   return (
@@ -435,10 +455,18 @@ function IssuesTab({ filter, onChanged }: { filter?: string; onChanged: () => vo
         <button onClick={submit} disabled={busy || !form.title.trim()} className={`${BTN_PRIMARY} mt-2 !px-4 !py-2`}>{busy ? "Raising…" : "Raise issue"}</button>
       </Card>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <select value={statusF} onChange={(e) => setStatusF(e.target.value)} className={INPUT_CLS}>
           <option value="">All states</option><option value="open">Open</option><option value="assigned">Assigned</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="closed">Closed</option>
         </select>
+        <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+          <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} className="h-3.5 w-3.5" />
+          Open only
+        </label>
+        <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+          <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} className="h-3.5 w-3.5" />
+          Overdue only
+        </label>
         {msg && <span className="text-xs text-muted-foreground">{msg}</span>}
       </div>
 
@@ -446,7 +474,7 @@ function IssuesTab({ filter, onChanged }: { filter?: string; onChanged: () => vo
       {shown.map((i) => (
         <Card key={i.id} title={`${i.title} — ${i.type}`}>
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <StatusPill status={i.status} />
+            <MfgBadge value={i.status} />
             <MfgBadge value={i.severity ?? "medium"} prefix="Severity" />
             {isOverdue(i) && <MfgBadge value="overdue" />}
             {i.owner && <span>Owner: <span className="font-semibold text-foreground">{i.owner}</span></span>}

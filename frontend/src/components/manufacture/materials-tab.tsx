@@ -83,8 +83,9 @@ function ReadinessPanel({ batch, onGotoBatch }: { batch: any; onGotoBatch: (id: 
                 <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted-foreground">
                   <th className="py-1.5 pr-2">Material</th>
                   <th className="py-1.5 pr-2 text-right">Required</th>
-                  <th className="py-1.5 pr-2 text-right">Available</th>
+                  <th className="py-1.5 pr-2 text-right" title="Physical confirmed stock">Physical</th>
                   <th className="py-1.5 pr-2 text-right">Reserved</th>
+                  <th className="py-1.5 pr-2 text-right" title="Usable = physical − reserved (single balance, reservations only mark stock)">Usable</th>
                   <th className="py-1.5 pr-2 text-right">Incoming PO</th>
                   <th className="py-1.5 text-right">Shortage</th>
                 </tr>
@@ -96,6 +97,7 @@ function ReadinessPanel({ batch, onGotoBatch }: { batch: any; onGotoBatch: (id: 
                     <td className="py-1.5 pr-2 text-right font-mono">{fmtNum(l.required)}</td>
                     <td className="py-1.5 pr-2 text-right font-mono">{fmtNum(l.available)}</td>
                     <td className="py-1.5 pr-2 text-right font-mono">{fmtNum(l.reserved)}</td>
+                    <td className="py-1.5 pr-2 text-right font-mono font-bold">{fmtNum(Math.max(0, Number(l.available || 0) - Number(l.reserved || 0)))}</td>
                     <td className="py-1.5 pr-2 text-right font-mono">{fmtNum(l.incoming)}</td>
                     <td className={`py-1.5 text-right font-mono font-bold ${l.shortage > 0 ? "text-red-600" : "text-emerald-600"}`}>{fmtNum(l.shortage)}</td>
                   </tr>

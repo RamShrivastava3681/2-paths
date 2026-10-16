@@ -5,11 +5,17 @@ import { Card, EmptyState } from "@/components/ledger-ui";
 import { MfgBadge, SectionTitle, INPUT_CLS, BTN_PRIMARY, BTN_GHOST, freshKey } from "./workflow-shared";
 
 /** Tally Export + accounting handoffs: prepare, send, retry, cancel — real outcomes only. */
-export function TallyTab() {
+export function TallyTab({ filter }: { filter?: string }) {
   const qc = useQueryClient();
   const previewQ = useQuery({ queryKey: ["tally-export-preview"], queryFn: () => api.manufacturing.tallyPreview(), retry: false });
   const hoQ = useQuery({ queryKey: ["mfg-handoffs"], queryFn: () => api.manufacturing.handoffs.list(), retry: false });
-  const handoffs: any[] = Array.isArray(hoQ.data) ? hoQ.data : [];
+  const all: any[] = Array.isArray(hoQ.data) ? hoQ.data : [];
+  const [statusF, setStatusF] = useState(filter && filter.startsWith("status:") ? filter.slice(7) : "");
+  const handoffs = all.filter((h) => {
+    if (!statusF) return true;
+    if (statusF === "pending") return h.status === "pending" || h.status === "processing";
+    return h.status === statusF;
+  });
   const [msg, setMsg] = useState<string | null>(null);
   const [form, setForm] = useState({ kind: "tally", docType: "invoice", docId: "", docNumber: "", batchId: "", customer: "", amount: "", voucherType: "Sales" });
   const refresh = () => { qc.invalidateQueries({ queryKey: ["mfg-handoffs"] }); qc.invalidateQueries({ queryKey: ["mfg-workflow"] }); };
@@ -71,6 +77,16 @@ export function TallyTab() {
           <input value={form.voucherType} onChange={(e) => setForm({ ...form, voucherType: e.target.value })} placeholder="Voucher type" className={INPUT_CLS} />
         </div>
         <button onClick={prepare} disabled={!form.docId} className={`${BTN_PRIMARY} mt-2`}>Prepare</button>
+        <div className="mt-2 flex items-center gap-2">
+          <select value={statusF} onChange={(e) => setStatusF(e.target.value)} className={INPUT_CLS}>
+            <option value="">All handoffs</option>
+            <option value="pending">Pending / processing</option>
+            <option value="failed">Failed (retry here)</option>
+            <option value="success">Successful</option>
+            <option value="not_required">Not required</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
 
         <div className="mt-3 space-y-1.5">
           {handoffs.length === 0 && <p className="text-xs text-muted-foreground">No handoffs yet. Pending, failed and successful attempts are all tracked with an audit trail.</p>}
