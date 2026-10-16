@@ -3,20 +3,26 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import api from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { BUSINESS_MODE_LS_KEY, useBusinessMode } from "@/lib/business-mode";
 import { toast } from "sonner";
 import {
   ArrowLeft,
   ArrowRight,
   Building2,
   Check,
+  Factory,
   Loader2,
   Lock,
   Mail,
   ShieldCheck,
+  Store,
 } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
-  validateSearch: z.object({ mode: z.enum(["signin", "signup"]).optional() }),
+  validateSearch: z.object({
+    mode: z.enum(["signin", "signup"]).optional(),
+    businessType: z.enum(["trading", "manufacturer"]).optional(),
+  }),
   component: AuthPage,
 });
 
@@ -32,39 +38,103 @@ const STATS: [string, string][] = [
   ["SOC 2", "Certified platform"],
 ];
 
+const TRACKS = [
+  {
+    id: "trading" as const,
+    icon: Store,
+    title: "Trading",
+    tagline: "Buy · Stock · Sell · Collect",
+    points: ["Purchase orders, GRNs & suppliers", "Sales orders, dispatches & invoices", "Inventory, forecasting & finance"],
+  },
+  {
+    id: "manufacturer" as const,
+    icon: Factory,
+    title: "Manufacturer",
+    tagline: "Everything in Trading, plus the factory floor",
+    points: ["Production batches linked to sales orders", "Live floor updates & factory issues", "Quality hold & release gating dispatch"],
+  },
+];
+
 const INPUT_CLS =
   "h-11 w-full rounded-lg border border-border bg-input pl-10 pr-3.5 text-sm text-foreground placeholder:text-muted-foreground shadow-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/15";
 
 function AuthPage() {
-  const { mode: initialMode } = Route.useSearch();
+  const { mode: initialMode, businessType: initialTrack } = Route.useSearch();
   const [mode, setMode] = useState<"signin" | "signup">(initialMode ?? "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [track, setTrack] = useState<"trading" | "manufacturer">(
+    initialTrack ??
+      (() => {
+        try {
+          const saved = window.localStorage.getItem(BUSINESS_MODE_LS_KEY);
+          return saved === "manufacturer" ? "manufacturer" : "trading";
+        } catch {
+          return "trading";
+        }
+      })(),
+  );
   const [loading, setLoading] = useState(false);
   const { user, refreshAuth } = useAuth();
+  const { setMode: setBusinessMode } = useBusinessMode();
   const navigate = useNavigate();
 
+  // Landing cards deep-link with ?businessType=… — honour it when it changes.
   useEffect(() => {
-    if (user) navigate({ to: "/app/dashboard", replace: true });
+    if (initialTrack) setTrack(initialTrack);
+  }, [initialTrack]);
+
+  const landingFor = (t: "trading" | "manufacturer") =>
+    t === "manufacturer" ? "/app/manufacturer-workbench" : "/app/dashboard";
+
+  // Already signed in (e.g. back-button) — jump straight into the workflow.
+  useEffect(() => {
+    if (user) {
+      const resolved: "trading" | "manufacturer" =
+        user.businessMode === "trading" || user.businessMode === "manufacturer"
+          ? user.businessMode
+          : track;
+      setBusinessMode(resolved);
+      navigate({ to: landingFor(resolved), replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, navigate]);
+
+  const persistTrack = (t: "trading" | "manufacturer") => {
+    setTrack(t);
+    setBusinessMode(t);
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       if (mode === "signup") {
-        await api.auth.signup({ email, password, companyName });
-        toast.success("Account created. You can now sign in.");
+        await api.auth.signup({ email, password, companyName, businessType: track });
+        persistTrack(track);
+        toast.success(
+          track === "manufacturer"
+            ? "Manufacturer account created. Sign in to open the factory workflow."
+            : "Trading account created. Sign in to open the trading workflow.",
+        );
         setMode("signin");
       } else {
         // The server sets the session as an httpOnly cookie on success —
         // nothing to store client-side.
-        await api.auth.login(email, password);
-        toast.success("Welcome back.");
+        const res = await api.auth.login(email, password);
+        const serverMode = (res as any)?.user?.businessMode ?? (res as any)?.businessMode;
+        // A tenant locked to one track always wins; a "both" tenant follows
+        // the track the user just picked on this screen.
+        const resolved: "trading" | "manufacturer" =
+          serverMode === "trading" || serverMode === "manufacturer" ? serverMode : track;
+        persistTrack(resolved);
+        toast.success(
+          resolved === "manufacturer" ? "Welcome back. Opening manufacturing." : "Welcome back.",
+        );
         // Re-check auth context so AppLayout sees the user immediately
         await refreshAuth();
-        navigate({ to: "/app/dashboard", replace: true });
+        navigate({ to: landingFor(resolved), replace: true });
       }
     } catch (err) {
       console.error("[Auth] Login error:", err);
@@ -163,11 +233,67 @@ function AuthPage() {
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
               {mode === "signup"
-                ? "Create an account to submit invoices and request advances."
-                : "Resume monitoring your receivables."}
+                ? "Pick your workflow, then create an account to get started."
+                : "Pick your workflow to resume where you left off."}
             </p>
 
-            <form onSubmit={onSubmit} className="mt-7 space-y-4">
+            {/* ── Trading | Manufacturer selector ── */}
+            <div
+              className="mt-6 grid grid-cols-2 gap-3"
+              role="radiogroup"
+              aria-label="Choose your workflow"
+            >
+              {TRACKS.map((t) => {
+                const active = track === t.id;
+                const Icon = t.icon;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => persistTrack(t.id)}
+                    className={`relative rounded-2xl border p-4 text-left transition-all ${
+                      active
+                        ? "border-primary bg-primary/[0.06] shadow-card ring-2 ring-primary/20"
+                        : "border-border bg-background hover:border-primary/40 hover:shadow-card"
+                    }`}
+                  >
+                    {active && (
+                      <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                        <Check className="h-3 w-3" />
+                      </span>
+                    )}
+                    <span
+                      className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                        active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      <Icon className="h-4.5 w-4.5" />
+                    </span>
+                    <span className="mt-3 block text-sm font-bold text-foreground">{t.title}</span>
+                    <span className="mt-0.5 block text-[11px] font-medium leading-snug text-muted-foreground">
+                      {t.tagline}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {/* Selected workflow detail — what this track unlocks */}
+            <div className="mt-3 rounded-xl border border-border bg-muted/40 px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                {track === "manufacturer" ? "Manufacturer workflow" : "Trading workflow"} includes
+              </p>
+              <ul className="mt-2 space-y-1.5">
+                {(TRACKS.find((t) => t.id === track)?.points ?? []).map((p) => (
+                  <li key={p} className="flex items-start gap-2 text-xs font-medium text-foreground">
+                    <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-500" /> {p}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <form onSubmit={onSubmit} className="mt-6 space-y-4">
               {mode === "signup" && (
                 <Field label="Company name" icon={<Building2 className="h-4 w-4" />}>
                   <input
@@ -207,7 +333,9 @@ function AuthPage() {
                 className="mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {mode === "signup" ? "Create account" : "Sign in"}
+                {mode === "signup"
+                  ? `Create ${track === "manufacturer" ? "manufacturer" : "trading"} account`
+                  : `Sign in to ${track === "manufacturer" ? "Manufacturing" : "Trading"}`}
                 {!loading && <ArrowRight className="h-4 w-4" />}
               </button>
             </form>

@@ -19,6 +19,7 @@ export type AuthUser = {
   contactName?: string;
   photoUrl?: string;
   roles?: AppRole[];
+  businessMode?: "trading" | "manufacturer" | "both";
 };
 
 type AuthState = {
@@ -68,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         companyName: data.companyName ?? data.company_name,
         contactName: data.contactName ?? data.contact_name,
         roles: data.roles,
+        businessMode: data.businessMode ?? data.business_mode,
       };
       setUser(authUser);
       setRoles((data.roles ?? []) as AppRole[]);

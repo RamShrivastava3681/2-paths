@@ -12,12 +12,16 @@ type BusinessModeState = {
 
 const Ctx = createContext<BusinessModeState | undefined>(undefined);
 
-const LS_KEY = "whizunik-business-mode";
+export const BUSINESS_MODE_LS_KEY = "whizunik-business-mode";
+
+const LS_KEY = BUSINESS_MODE_LS_KEY;
 
 function initialMode(): BusinessMode {
   try {
     const params = new URLSearchParams(window.location.search);
-    const q = params.get("mode");
+    // `?businessType=` is the canonical selector param (landing + auth);
+    // `?mode=` is kept for backwards compatibility.
+    const q = params.get("businessType") ?? params.get("mode");
     if (q === "trading" || q === "manufacturer") {
       window.localStorage.setItem(LS_KEY, q);
       return q;

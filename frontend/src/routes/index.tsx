@@ -232,7 +232,7 @@ function Landing() {
           <div className="mt-12 grid gap-4 md:grid-cols-2">
             <Link
               to="/auth"
-              search={{ mode: "signup" }}
+              search={{ mode: "signup", businessType: "trading" }}
               className="group rounded-2xl border border-border bg-card p-8 shadow-card transition-all duration-200 hover:-translate-y-1 hover:border-primary/30 hover:shadow-card-hover"
             >
               <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
@@ -252,7 +252,7 @@ function Landing() {
             </Link>
             <Link
               to="/auth"
-              search={{ mode: "signup" }}
+              search={{ mode: "signup", businessType: "manufacturer" }}
               className="group rounded-2xl border border-primary/30 bg-gradient-to-b from-primary/[0.07] to-card p-8 shadow-card transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-card-hover"
             >
               <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">

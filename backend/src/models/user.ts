@@ -98,7 +98,7 @@ export interface UserProfile {
 
 export async function signup(req: Request, res: Response) {
   try {
-    const { email, password, companyName, contactName } = req.body || {};
+    const { email, password, companyName, contactName, businessType } = req.body || {};
 
     // Strict input validation (types, formats, lengths) before any work.
     const emailErr = validateEmail(email);
@@ -109,6 +109,10 @@ export async function signup(req: Request, res: Response) {
     if (companyErr) return res.status(400).json({ error: `companyName ${companyErr}` });
     const contactErr = clampString(contactName, 200);
     if (contactErr) return res.status(400).json({ error: `contactName ${contactErr}` });
+    // Business track chosen on the auth screen: trading | manufacturer.
+    // Anything else falls back to trading so the workflow always resolves.
+    const rawType = typeof businessType === "string" ? businessType.trim().toLowerCase() : "";
+    const chosenType = rawType === "manufacturer" ? "manufacturer" : "trading";
 
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -147,6 +151,15 @@ export async function signup(req: Request, res: Response) {
 
     await db.putItem(user);
 
+    // Persist the trading/manufacturer choice as this tenant's business mode
+    // so /business-mode + /auth/me always resolve to the selected workflow.
+    try {
+      const { setBusinessMode } = await import("./manufacturing.js");
+      await setBusinessMode(id, chosenType as "trading" | "manufacturer");
+    } catch (e) {
+      console.error("[Auth] Failed to persist businessType:", e);
+    }
+
     // Signup does NOT create a session — the user signs in explicitly, so no
     // token and no cookie is issued here (matches the current UI flow).
     return res.status(201).json({
@@ -156,6 +169,8 @@ export async function signup(req: Request, res: Response) {
         companyName: user.companyName,
         contactName: user.contactName,
         roles: user.roles,
+        businessType: chosenType,
+        businessMode: chosenType,
       },
     });
   } catch (err: any) {
@@ -196,6 +211,16 @@ export async function login(req: Request, res: Response) {
     // Record last-seen + IP presence (fire-and-forget, never blocks login).
     recordLogin(user.id, req.ip);
 
+    // Resolve the tenant's workflow (trading | manufacturer | both) so the
+    // login screen can route straight into the selected track.
+    let businessMode: string = "trading";
+    try {
+      const { getBusinessMode } = await import("./manufacturing.js");
+      businessMode = await getBusinessMode(user.id);
+    } catch {
+      /* default stays trading */
+    }
+
     return res.json({
       user: {
         id: user.id,
@@ -203,6 +228,8 @@ export async function login(req: Request, res: Response) {
         companyName: user.companyName,
         contactName: user.contactName,
         roles: user.roles,
+        businessMode,
+        businessType: businessMode === "manufacturer" ? "manufacturer" : businessMode === "both" ? "both" : "trading",
       },
     });
   } catch (err: any) {
@@ -216,7 +243,13 @@ export async function getProfile(req: Request, res: Response) {
     const item = await db.getItem(`USER#${req.user!.userId}`);
     if (!item) return res.status(404).json({ error: "User not found" });
     const { passwordHash, ...profile } = item as any;
-    return res.json(profile);
+    try {
+      const { getBusinessMode } = await import("./manufacturing.js");
+      const businessMode = await getBusinessMode(req.user!.userId);
+      return res.json({ ...profile, businessMode });
+    } catch {
+      return res.json(profile);
+    }
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

@@ -277,6 +277,165 @@ export function assertBatchReleasable(b: ManufacturingBatch): void {
   }
 }
 
+/** Released-but-unallocated finished stock for a batch (dispatch-ready qty). */
+export function releasableQty(b: ManufacturingBatch): number {
+  if (b.qualityStatus !== "Released") return 0;
+  return availableQty(b);
+}
+
+/**
+ * Step 12: complete a batch. Good output enters an explicit quality-pending
+ * state (qualityStatus stays Pending, releasedQty stays 0 → availableQty 0),
+ * rejects remain unavailable, and the batch can no longer take updates.
+ */
+export async function completeBatch(id: string, clientId: string): Promise<ManufacturingBatch | null> {
+  const b = await getBatch(id);
+  if (!b || b.clientId !== clientId) return null;
+  if (b.status === "completed") return b;
+  const { updateItem } = await import("../dynamodb.js");
+  await updateItem(b.pk, b.sk, { status: "completed", updatedAt: db.nowISO() });
+  return getBatch(id);
+}
+
+// ---------------------------------------------------------------------------
+// MaterialIssue — raw-material consumption per batch (manufacture workflow)
+// Step 9 of the E2E plan: issue 100 units → raw stock −100, linked to batch,
+// over-issue blocked, repeat submission idempotent.
+// ---------------------------------------------------------------------------
+
+export interface MaterialIssue {
+  pk: string;
+  sk: string;
+  gsi1pk: string;
+  gsi1sk: string;
+  entityType: "MaterialIssue";
+  id: string;
+  clientId: string;
+  batchId: string;
+  batchNumber: string | null;
+  productId: string;
+  sku: string | null;
+  productName: string | null;
+  qty: number;
+  lot: string | null;
+  warehouse: string | null;
+  idempotencyKey: string;
+  movementId: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+const matIssuePk = (id: string) => `MFGISSUE-MAT#${id}`;
+
+export async function findMaterialIssueByKey(
+  clientId: string,
+  key: string
+): Promise<MaterialIssue | null> {
+  const all = await db.scanByType("MaterialIssue", { limit: 2000 });
+  return (
+    ((all as MaterialIssue[]).find(
+      (i) => i.clientId === clientId && i.idempotencyKey === key
+    ) as MaterialIssue) ?? null
+  );
+}
+
+export async function listMaterialIssues(
+  clientId: string,
+  batchId?: string
+): Promise<MaterialIssue[]> {
+  const { items } = await db.queryByGSI1(clientId, { entityType: "MaterialIssue", limit: 500 });
+  const all = items as MaterialIssue[];
+  const filtered = batchId ? all.filter((i) => i.batchId === batchId) : all;
+  return filtered.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+
+/**
+ * Issue raw material to a batch. Writes a confirmed `out` stock movement so
+ * raw stock drops immediately, and records the issue row for traceability.
+ * Idempotent per (clientId, idempotencyKey). Over-issue → 409.
+ */
+export async function issueMaterial(data: {
+  clientId: string;
+  batchId: string;
+  productId: string;
+  qty: number;
+  lot?: string | null;
+  warehouse?: string | null;
+  sku?: string | null;
+  productName?: string | null;
+  idempotencyKey: string;
+  createdBy?: string | null;
+}): Promise<{ issue: MaterialIssue; duplicate: boolean }> {
+  if (!data.idempotencyKey) throw new Error("idempotencyKey is required");
+  const existing = await findMaterialIssueByKey(data.clientId, data.idempotencyKey);
+  if (existing) return { issue: existing, duplicate: true };
+
+  const qty = Number(data.qty);
+  if (!Number.isFinite(qty) || qty <= 0) throw new Error("qty must be > 0");
+  if (!data.productId) throw new Error("productId is required");
+
+  const batch = await getBatch(data.batchId);
+  if (!batch) throw new Error("Batch not found");
+  if (batch.clientId !== data.clientId)
+    throw Object.assign(new Error("Access denied"), { statusCode: 403 });
+  if (batch.status === "closed" || batch.status === "completed")
+    throw Object.assign(new Error("Batch is completed — no further material issues"), { statusCode: 409 });
+
+  // Available raw stock = Σ confirmed movements for this product.
+  const { list: listMovements, getBalance, create: createMovement } = await import(
+    "./stock-movement.js"
+  );
+  const movements = await listMovements(data.clientId);
+  const balance = await getBalance(data.productId, movements);
+  if (qty > balance) {
+    throw Object.assign(
+      new Error(`Insufficient stock — ${balance} available, ${qty} requested`),
+      { statusCode: 409, code: "INSUFFICIENT_STOCK" }
+    );
+  }
+
+  const movement = await createMovement({
+    clientId: data.clientId,
+    direction: "out",
+    productId: data.productId,
+    itemName: data.productName ?? data.productId,
+    sku: data.sku ?? null,
+    quantity: qty,
+    warehouse: data.warehouse ?? null,
+    reason: "Material issue",
+    linkedDocumentType: "ManufacturingBatch",
+    linkedDocumentNumber: batch.batchNumber,
+    status: "confirmed",
+    notes: `Issued to ${batch.batchNumber}${data.lot ? ` · lot ${data.lot}` : ""}`,
+  });
+
+  const id = uuid();
+  const now = db.nowISO();
+  const item: MaterialIssue = {
+    pk: matIssuePk(id),
+    sk: matIssuePk(id),
+    gsi1pk: `CLIENT#${data.clientId}`,
+    gsi1sk: `MaterialIssue#${now}#${id}`,
+    entityType: "MaterialIssue",
+    id,
+    clientId: data.clientId,
+    batchId: data.batchId,
+    batchNumber: batch.batchNumber,
+    productId: data.productId,
+    sku: data.sku ?? null,
+    productName: data.productName ?? null,
+    qty,
+    lot: data.lot ?? null,
+    warehouse: data.warehouse ?? null,
+    idempotencyKey: data.idempotencyKey,
+    movementId: (movement as any).id ?? null,
+    createdBy: data.createdBy ?? null,
+    createdAt: now,
+  };
+  await db.putItem(item);
+  return { issue: item, duplicate: false };
+}
+
 // ---------------------------------------------------------------------------
 // ProductionUpdate — incremental, idempotent
 // ---------------------------------------------------------------------------
@@ -379,6 +538,17 @@ export async function recordUpdate(
 
 export type FactoryIssueType = "stoppage" | "maintenance" | "staffing" | "utility" | "material";
 
+/** Step 11 lifecycle: Open → Assigned → In Progress → Resolved → Closed. */
+export type FactoryIssueStatus = "open" | "assigned" | "in_progress" | "resolved" | "closed";
+
+const ISSUE_TRANSITIONS: Record<FactoryIssueStatus, FactoryIssueStatus[]> = {
+  open: ["assigned", "closed"],
+  assigned: ["in_progress", "closed"],
+  in_progress: ["resolved", "closed"],
+  resolved: ["closed", "in_progress"],
+  closed: [],
+};
+
 export interface FactoryIssue {
   pk: string;
   sk: string;
@@ -396,7 +566,8 @@ export interface FactoryIssue {
   description: string | null;
   owner: string | null;
   expectedResolutionAt: string | null;
-  status: "open" | "closed";
+  status: FactoryIssueStatus;
+  statusHistory: Array<{ from: FactoryIssueStatus; to: FactoryIssueStatus; by: string | null; at: string }>;
   closedAt: string | null;
   closedBy: string | null;
   createdBy: string | null;
@@ -458,6 +629,7 @@ export async function createIssue(
     owner: data.owner ?? null,
     expectedResolutionAt: data.expectedResolutionAt ?? null,
     status: "open",
+    statusHistory: [],
     closedAt: null,
     closedBy: null,
     createdBy: data.createdBy ?? null,
@@ -468,15 +640,74 @@ export async function createIssue(
   return item;
 }
 
-export async function closeIssue(id: string, clientId: string, closedBy: string | null): Promise<FactoryIssue | null> {
+async function getIssue(id: string, clientId: string): Promise<FactoryIssue | null> {
   const all = await db.scanByType("FactoryIssue", { limit: 2000 });
-  const item = (all as FactoryIssue[]).find((i) => i.id === id && i.clientId === clientId) as FactoryIssue | undefined;
+  return (
+    ((all as FactoryIssue[]).find((i) => i.id === id && i.clientId === clientId) as FactoryIssue) ??
+    null
+  );
+}
+
+/**
+ * Move a factory issue forward through its lifecycle. Only the listed
+ * transitions are allowed; closing stamps closedAt/closedBy, reopening
+ * (resolved → in_progress) clears them.
+ */
+export async function transitionIssue(
+  id: string,
+  clientId: string,
+  to: FactoryIssueStatus,
+  actor: string | null,
+  owner?: string | null
+): Promise<FactoryIssue | null> {
+  const item = await getIssue(id, clientId);
   if (!item) return null;
+  const allowed = ISSUE_TRANSITIONS[item.status] ?? [];
+  if (!allowed.includes(to)) {
+    throw Object.assign(
+      new Error(`Cannot move issue from ${item.status} to ${to}`),
+      { statusCode: 409, code: "INVALID_ISSUE_TRANSITION" }
+    );
+  }
+  const now = db.nowISO();
+  const patch: Record<string, any> = {
+    status: to,
+    statusHistory: [
+      ...(item.statusHistory || []),
+      { from: item.status, to, by: actor, at: now },
+    ],
+    updatedAt: now,
+  };
+  if (owner !== undefined) patch.owner = owner;
+  if (to === "closed") {
+    patch.closedAt = now;
+    patch.closedBy = actor;
+  }
+  if (item.status === "closed" || to === "in_progress") {
+    if (to !== "closed") {
+      patch.closedAt = null;
+      patch.closedBy = null;
+    }
+  }
+  await db.updateItem(item.pk, item.sk, patch);
+  return getIssue(id, clientId);
+}
+
+export async function closeIssue(id: string, clientId: string, closedBy: string | null): Promise<FactoryIssue | null> {
+  const item = await getIssue(id, clientId);
+  if (!item) return null;
+  // Close directly from any non-closed state (back-compat shortcut).
+  if (item.status === "closed") return item;
+  const now = db.nowISO();
   await db.updateItem(item.pk, item.sk, {
     status: "closed",
-    closedAt: db.nowISO(),
+    statusHistory: [
+      ...(item.statusHistory || []),
+      { from: item.status, to: "closed" as FactoryIssueStatus, by: closedBy, at: now },
+    ],
+    closedAt: now,
     closedBy: closedBy ?? null,
-    updatedAt: db.nowISO(),
+    updatedAt: now,
   });
-  return (await db.getItem(item.pk)) as FactoryIssue | null;
+  return getIssue(id, clientId);
 }

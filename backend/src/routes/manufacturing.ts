@@ -103,11 +103,8 @@ function ownBatch(b: Mfg.ManufacturingBatch | null, clientId: string) {
 
 router.post("/manufacturing-batches/:id/complete", async (req, res) => {
   try {
-    const b = await Mfg.getBatch(req.params.id);
-    if (!ownBatch(b, req.user!.userId)) return res.status(404).json({ error: "Not found" });
-    const { updateItem } = await import("../dynamodb.js");
-    await updateItem(b!.pk, b!.sk, { status: "completed", updatedAt: new Date().toISOString() });
-    const fresh = await Mfg.getBatch(b!.id);
+    const fresh = await Mfg.completeBatch(req.params.id, req.user!.userId);
+    if (!fresh) return res.status(404).json({ error: "Not found" });
     res.json({ ...fresh, availableQty: Mfg.availableQty(fresh!) });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -128,8 +125,10 @@ async function transitionQuality(
       roles.includes("factor_admin") ||
       roles.includes("super_admin") ||
       cfg.qualityRoles.some((r) => roles.includes(r));
-    if (to === "Released" && !canQuality) {
-      return res.status(403).json({ error: "Only an authorised quality role can release a batch" });
+    // Both Hold and Release are quality-gated: only an authorised quality
+    // role may move a batch in or out of Hold (E2E Steps 13–14).
+    if (!canQuality) {
+      return res.status(403).json({ error: "Only an authorised quality role can hold or release a batch" });
     }
     const review: Mfg.QualityReview = {
       by: req.user!.userId,
@@ -145,7 +144,10 @@ async function transitionQuality(
       updatedAt: new Date().toISOString(),
     };
     // Release snapshots the produced good quantity as releasable stock.
+    // Re-hold gates it again: previously released units become unavailable
+    // until the next release re-snapshots them.
     if (to === "Released") patch.releasedQty = Number(b!.producedGoodQty || 0);
+    if (to === "Hold") patch.releasedQty = 0;
     await updateItem(b!.pk, b!.sk, patch);
     const fresh = await Mfg.getBatch(b!.id);
     res.json({ ...fresh, availableQty: Mfg.availableQty(fresh!) });
@@ -219,6 +221,40 @@ router.post("/production-updates", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Material issues — raw-material consumption per batch (Step 9)
+// ---------------------------------------------------------------------------
+
+router.get("/material-issues", async (req, res) => {
+  try {
+    const batchId = typeof req.query.batchId === "string" ? req.query.batchId : undefined;
+    res.json(await Mfg.listMaterialIssues(req.user!.userId, batchId));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/material-issues", async (req, res) => {
+  try {
+    const { issue, duplicate } = await Mfg.issueMaterial({
+      clientId: req.user!.userId,
+      batchId: req.body?.batchId,
+      productId: req.body?.productId,
+      qty: req.body?.qty,
+      lot: req.body?.lot ?? null,
+      warehouse: req.body?.warehouse ?? null,
+      sku: req.body?.sku ?? null,
+      productName: req.body?.productName ?? null,
+      idempotencyKey: req.body?.idempotencyKey,
+      createdBy: req.user!.userId,
+    });
+    res.status(duplicate ? 200 : 201).json({ ...issue, duplicate });
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Factory issues
 // ---------------------------------------------------------------------------
 
@@ -257,6 +293,28 @@ router.post("/factory-issues/:id/close", async (req, res) => {
     res.json(closed);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Step 11 lifecycle: Open → Assigned → In Progress → Resolved → Closed.
+router.post("/factory-issues/:id/status", async (req, res) => {
+  try {
+    const to = req.body?.status;
+    if (!["open", "assigned", "in_progress", "resolved", "closed"].includes(to)) {
+      return res.status(400).json({ error: "status must be open | assigned | in_progress | resolved | closed" });
+    }
+    const updated = await Mfg.transitionIssue(
+      req.params.id,
+      req.user!.userId,
+      to,
+      req.user!.userId,
+      req.body?.owner ?? undefined
+    );
+    if (!updated) return res.status(404).json({ error: "Not found" });
+    res.json(updated);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
   }
 });
 

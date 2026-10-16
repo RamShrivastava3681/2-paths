@@ -90,12 +90,13 @@ const api = {
   // client JS never sees or stores it.
   auth: {
     login: (email: string, password: string) =>
-      api.post<{ user: any }>("/auth/login", { email, password }),
+      api.post<{ user: any; businessMode?: string }>("/auth/login", { email, password }),
     signup: (data: {
       email: string;
       password: string;
       companyName?: string;
       contactName?: string;
+      businessType?: "trading" | "manufacturer";
     }) => api.post<{ user: any }>("/auth/signup", data),
     me: () => api.get<any>("/auth/me"),
     updateProfile: (data: any) => api.put<any>("/auth/profile", data),
@@ -783,7 +784,23 @@ const api = {
     issues: {
       list: () => api.get<any[]>("/factory-issues"),
       create: (data: any) => api.post<any>("/factory-issues", data),
+      setStatus: (id: string, status: "open" | "assigned" | "in_progress" | "resolved" | "closed", owner?: string) =>
+        api.post<any>(`/factory-issues/${id}/status`, { status, owner }),
       close: (id: string) => api.post<any>(`/factory-issues/${id}/close`, {}),
+    },
+    materialIssues: {
+      list: (batchId?: string) =>
+        api.get<any[]>(`/material-issues${batchId ? `?batchId=${encodeURIComponent(batchId)}` : ""}`),
+      issue: (data: {
+        batchId: string;
+        productId: string;
+        qty: number;
+        lot?: string | null;
+        warehouse?: string | null;
+        sku?: string | null;
+        productName?: string | null;
+        idempotencyKey: string;
+      }) => api.post<any>("/material-issues", data),
     },
     overview: () => api.get<any>("/manufacturer-overview"),
     tallyPreview: () => api.get<any>("/tally-export-preview"),
