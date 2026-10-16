@@ -752,6 +752,43 @@ const api = {
     buyers: () => api.get<any[]>("/reports/buyers"),
   },
 
+  // Manufacturing (reusable modules: batches, updates, issues, quality)
+  manufacturing: {
+    businessMode: {
+      get: () => api.get<{ mode: "trading" | "manufacturer" | "both" }>("/business-mode"),
+      update: (mode: "trading" | "manufacturer" | "both") =>
+        api.put("/business-mode", { mode }),
+    },
+    config: {
+      get: () => api.get<any>("/manufacturing-config"),
+      update: (data: any) => api.put<any>("/manufacturing-config", data),
+    },
+    batches: {
+      list: () => api.get<any[]>("/manufacturing-batches"),
+      get: (id: string) => api.get<any>(`/manufacturing-batches/${id}`),
+      create: (data: any) => api.post<any>("/manufacturing-batches", data),
+      complete: (id: string) => api.post<any>(`/manufacturing-batches/${id}/complete`, {}),
+      hold: (id: string, remarks?: string) =>
+        api.post<any>(`/manufacturing-batches/${id}/hold`, { remarks }),
+      release: (id: string, remarks?: string) =>
+        api.post<any>(`/manufacturing-batches/${id}/release`, { remarks }),
+      allocate: (id: string, qty: number) =>
+        api.post<any>(`/manufacturing-batches/${id}/allocate`, { qty }),
+    },
+    updates: {
+      list: (batchId: string) =>
+        api.get<any[]>(`/production-updates?batchId=${encodeURIComponent(batchId)}`),
+      record: (data: any) => api.post<any>("/production-updates", data),
+    },
+    issues: {
+      list: () => api.get<any[]>("/factory-issues"),
+      create: (data: any) => api.post<any>("/factory-issues", data),
+      close: (id: string) => api.post<any>(`/factory-issues/${id}/close`, {}),
+    },
+    overview: () => api.get<any>("/manufacturer-overview"),
+    tallyPreview: () => api.get<any>("/tally-export-preview"),
+  },
+
   // E-Way Bill
   ewayBill: {
     list: (status?: string) => api.get<any[]>(`/eway-bills${status ? `?status=${status}` : ""}`),

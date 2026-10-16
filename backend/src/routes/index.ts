@@ -9483,6 +9483,12 @@ router.use(reportsRoutes);
 import bulkPaymentsRoutes from "./bulk-payments.js";
 router.use(bulkPaymentsRoutes);
 
+// ===================== MANUFACTURING (reusable modules) =====================
+// Generic manufacturing: batches, production updates, factory issues,
+// quality hold/release, business-mode switch. No customer-specific code.
+import manufacturingRoutes from "./manufacturing.js";
+router.use(manufacturingRoutes);
+
 // ===================== STOCK LOCATIONS =====================
 router.get("/stock-locations", authMiddleware, async (req, res) => {
   try {

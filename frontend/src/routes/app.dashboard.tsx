@@ -24,6 +24,9 @@ import {
   BarChart3,
   Users
 } from "lucide-react";
+import { useBusinessMode } from "@/lib/business-mode";
+import { useQuery } from "@tanstack/react-query";
+import api from "@/lib/api-client";
 import { useCommandData, num, pick } from "@/components/command-overview/useCommandData";
 import { fmtCompact, fmtFull } from "@/components/command-overview/cards";
 import { PriorityTable } from "@/components/command-overview/PriorityTable";
@@ -43,6 +46,14 @@ function Dashboard() {
   const canProcurement = admin || isOperations;
 
   const d = useCommandData();
+  const { mode: businessMode, setMode: setBusinessMode } = useBusinessMode();
+  const mfgOverviewQ = useQuery({
+    queryKey: ["manufacturer-overview"],
+    queryFn: () => api.manufacturing.overview(),
+    enabled: businessMode === "manufacturer",
+    staleTime: 15_000,
+    retry: false,
+  });
   const initialLoading = d.loading;
   
   const userName = user?.contactName || user?.email?.split('@')[0] || "Executive";
@@ -104,9 +115,27 @@ function Dashboard() {
               <span className="flex items-center"><Clock className="h-3.5 w-3.5 mr-1.5"/> Last synced: Just now <RefreshCw className="h-3 w-3 ml-2 cursor-pointer hover:text-slate-800" onClick={d.refetch.cash}/></span>
               <button className="flex items-center text-slate-400 hover:text-slate-700"><Settings className="h-4 w-4"/></button>
             </div>
-            <Link to="/app/tasks" className="bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold py-2 px-5 rounded-md shadow-sm transition-all flex items-center">
-              Open Action Centre <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
+            <div className="flex items-center gap-2">
+              {/* Trading | Manufacturer mode toggle */}
+              <div className="flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-xs font-semibold" role="tablist" aria-label="Business mode">
+                {(["trading", "manufacturer"] as const).map((m) => (
+                  <button
+                    key={m}
+                    role="tab"
+                    aria-selected={businessMode === m}
+                    onClick={() => setBusinessMode(m)}
+                    className={`px-3 py-1.5 rounded capitalize transition-colors ${
+                      businessMode === m ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+              <Link to="/app/tasks" className="bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold py-2 px-5 rounded-md shadow-sm transition-all flex items-center">
+                Open Action Centre <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </div>
           </div>
         </div>
         
@@ -171,6 +200,37 @@ function Dashboard() {
             sub="Required actions" to="/app/tasks" critical={d.attentionCount > 0}
           />
         </section>
+
+        {/* Manufacturer overview strip — only in manufacturer mode */}
+        {businessMode === "manufacturer" && (
+          <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h2 className="text-lg font-bold text-slate-800">Manufacturing Overview</h2>
+              <Link to="/app/manufacturer-workbench" className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center">
+                Open workbench <ChevronRight className="h-3 w-3 ml-1" />
+              </Link>
+            </div>
+            <div className="p-6">
+              {mfgOverviewQ.isLoading && <p className="text-sm text-slate-500">Loading manufacturing data…</p>}
+              {mfgOverviewQ.isError && (
+                <p className="text-sm text-slate-500">
+                  No manufacturing data yet. Create your first production batch in the{" "}
+                  <Link to="/app/manufacturer-workbench" className="font-semibold text-blue-600">Manufacturing workbench</Link>.
+                </p>
+              )}
+              {mfgOverviewQ.data && (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  <MfgStat label="Open batches" value={String(mfgOverviewQ.data.openBatchCount ?? 0)} />
+                  <MfgStat label="Good output" value={String(mfgOverviewQ.data.totalGood ?? 0)} />
+                  <MfgStat label="Rejects" value={String(mfgOverviewQ.data.totalRejected ?? 0)} />
+                  <MfgStat label="Open issues" value={String(mfgOverviewQ.data.openIssueCount ?? 0)} />
+                  <MfgStat label="Held / pending" value={String(mfgOverviewQ.data.heldQty ?? 0)} tone="text-amber-600" />
+                  <MfgStat label="Released ready" value={String(mfgOverviewQ.data.releasedReady ?? 0)} tone="text-emerald-600" />
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
@@ -592,6 +652,15 @@ function Dashboard() {
 }
 
 // Subcomponents
+
+function MfgStat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <Link to="/app/manufacturer-workbench" className="block bg-slate-50 p-4 rounded-lg border border-slate-100 hover:border-blue-300 transition-colors">
+      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{label}</div>
+      <div className={`mt-1 text-2xl font-bold ${tone ?? "text-slate-900"}`}>{value}</div>
+    </Link>
+  );
+}
 
 function KpiBox({ title, value, trend, sub, to, trendUp, critical = false }: any) {
   return (

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/lib/auth-context";
+import { BusinessModeProvider } from "@/lib/business-mode";
 import { ThemeProvider, useTheme } from "@/lib/theme";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -67,8 +68,10 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
-          <Outlet />
-          <ThemedToaster />
+          <BusinessModeProvider>
+            <Outlet />
+            <ThemedToaster />
+          </BusinessModeProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

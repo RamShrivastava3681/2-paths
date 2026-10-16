@@ -34,6 +34,7 @@ import { Route as AppForecastRouteImport } from './app.forecast'
 import { Route as AppGrnRouteImport } from './app.grn'
 import { Route as AppInventoryRouteImport } from './app.inventory'
 import { Route as AppInvoicesRouteImport } from './app.invoices'
+import { Route as AppManufacturerWorkbenchRouteImport } from './app.manufacturer-workbench'
 import { Route as AppMarketplaceRouteImport } from './app.marketplace'
 import { Route as AppNotesRouteImport } from './app.notes'
 import { Route as AppProcurementWorkbenchRouteImport } from './app.procurement-workbench'
@@ -192,6 +193,12 @@ const AppInvoicesRoute = AppInvoicesRouteImport.update({
   path: '/invoices',
   getParentRoute: () => AppRoute,
 } as any)
+const AppManufacturerWorkbenchRoute =
+  AppManufacturerWorkbenchRouteImport.update({
+    id: '/manufacturer-workbench',
+    path: '/manufacturer-workbench',
+    getParentRoute: () => AppRoute,
+  } as any)
 const AppMarketplaceRoute = AppMarketplaceRouteImport.update({
   id: '/marketplace',
   path: '/marketplace',
@@ -379,6 +386,7 @@ export interface FileRoutesByFullPath {
   '/app/grn': typeof AppGrnRoute
   '/app/inventory': typeof AppInventoryRoute
   '/app/invoices': typeof AppInvoicesRoute
+  '/app/manufacturer-workbench': typeof AppManufacturerWorkbenchRoute
   '/app/marketplace': typeof AppMarketplaceRoute
   '/app/notes': typeof AppNotesRoute
   '/app/procurement-workbench': typeof AppProcurementWorkbenchRoute
@@ -438,6 +446,7 @@ export interface FileRoutesByTo {
   '/app/grn': typeof AppGrnRoute
   '/app/inventory': typeof AppInventoryRoute
   '/app/invoices': typeof AppInvoicesRoute
+  '/app/manufacturer-workbench': typeof AppManufacturerWorkbenchRoute
   '/app/marketplace': typeof AppMarketplaceRoute
   '/app/notes': typeof AppNotesRoute
   '/app/procurement-workbench': typeof AppProcurementWorkbenchRoute
@@ -497,6 +506,7 @@ export interface FileRoutesById {
   '/app/grn': typeof AppGrnRoute
   '/app/inventory': typeof AppInventoryRoute
   '/app/invoices': typeof AppInvoicesRoute
+  '/app/manufacturer-workbench': typeof AppManufacturerWorkbenchRoute
   '/app/marketplace': typeof AppMarketplaceRoute
   '/app/notes': typeof AppNotesRoute
   '/app/procurement-workbench': typeof AppProcurementWorkbenchRoute
@@ -558,6 +568,7 @@ export interface FileRouteTypes {
     | '/app/grn'
     | '/app/inventory'
     | '/app/invoices'
+    | '/app/manufacturer-workbench'
     | '/app/marketplace'
     | '/app/notes'
     | '/app/procurement-workbench'
@@ -617,6 +628,7 @@ export interface FileRouteTypes {
     | '/app/grn'
     | '/app/inventory'
     | '/app/invoices'
+    | '/app/manufacturer-workbench'
     | '/app/marketplace'
     | '/app/notes'
     | '/app/procurement-workbench'
@@ -675,6 +687,7 @@ export interface FileRouteTypes {
     | '/app/grn'
     | '/app/inventory'
     | '/app/invoices'
+    | '/app/manufacturer-workbench'
     | '/app/marketplace'
     | '/app/notes'
     | '/app/procurement-workbench'
@@ -892,6 +905,13 @@ declare module '@tanstack/react-router' {
       path: '/invoices'
       fullPath: '/app/invoices'
       preLoaderRoute: typeof AppInvoicesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/manufacturer-workbench': {
+      id: '/app/manufacturer-workbench'
+      path: '/manufacturer-workbench'
+      fullPath: '/app/manufacturer-workbench'
+      preLoaderRoute: typeof AppManufacturerWorkbenchRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/marketplace': {
@@ -1158,6 +1178,7 @@ interface AppRouteChildren {
   AppGrnRoute: typeof AppGrnRoute
   AppInventoryRoute: typeof AppInventoryRoute
   AppInvoicesRoute: typeof AppInvoicesRoute
+  AppManufacturerWorkbenchRoute: typeof AppManufacturerWorkbenchRoute
   AppMarketplaceRoute: typeof AppMarketplaceRoute
   AppNotesRoute: typeof AppNotesRoute
   AppProcurementWorkbenchRoute: typeof AppProcurementWorkbenchRoute
@@ -1211,6 +1232,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppGrnRoute: AppGrnRoute,
   AppInventoryRoute: AppInventoryRoute,
   AppInvoicesRoute: AppInvoicesRoute,
+  AppManufacturerWorkbenchRoute: AppManufacturerWorkbenchRoute,
   AppMarketplaceRoute: AppMarketplaceRoute,
   AppNotesRoute: AppNotesRoute,
   AppProcurementWorkbenchRoute: AppProcurementWorkbenchRoute,

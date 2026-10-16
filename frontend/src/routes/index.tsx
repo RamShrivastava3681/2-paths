@@ -213,6 +213,67 @@ function Landing() {
         </div>
       </section>
 
+      {/* Choose your business type — Trading vs Manufacturing */}
+      <section className="border-t border-border/60 bg-background">
+        <div className="mx-auto max-w-7xl px-6 py-20">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-primary font-semibold">
+              Two modes, one platform
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-balance md:text-4xl">
+              Are you trading goods or making them?
+            </h2>
+            <p className="mt-4 text-muted-foreground">
+              Trading covers the full buy–stock–sell cycle. Manufacturing adds
+              production batches, live floor updates, factory issues and quality
+              hold &amp; release — on top of the same trading flows.
+            </p>
+          </div>
+          <div className="mt-12 grid gap-4 md:grid-cols-2">
+            <Link
+              to="/auth"
+              search={{ mode: "signup" }}
+              className="group rounded-2xl border border-border bg-card p-8 shadow-card transition-all duration-200 hover:-translate-y-1 hover:border-primary/30 hover:shadow-card-hover"
+            >
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
+                Trading &amp; distribution
+              </div>
+              <h3 className="mt-2 text-xl font-semibold text-foreground">
+                Buy, stock, sell, collect
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Products, suppliers, purchase orders, GRNs, sales orders,
+                dispatches, invoices, inventory, forecasting and finance — the
+                complete trading cycle.
+              </p>
+              <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                Start trading <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </span>
+            </Link>
+            <Link
+              to="/auth"
+              search={{ mode: "signup" }}
+              className="group rounded-2xl border border-primary/30 bg-gradient-to-b from-primary/[0.07] to-card p-8 shadow-card transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-card-hover"
+            >
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
+                Manufacturing
+              </div>
+              <h3 className="mt-2 text-xl font-semibold text-foreground">
+                Everything in Trading, plus the factory floor
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Production batches linked to sales orders, live production
+                updates, factory stoppages with owners, and quality
+                hold &amp; release that gates dispatch.
+              </p>
+              <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                Start manufacturing <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </span>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Features */}
       <section className="border-t border-border/60 bg-background/40">
         <div className="mx-auto max-w-7xl px-6 py-20">

@@ -27,8 +27,10 @@ import {
   Warehouse,
   ListTodo,
   Store,
+  Factory,
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
+import { useBusinessMode } from "@/lib/business-mode";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -76,7 +78,9 @@ const DEBTORS_ITEMS: NavItem[] = [
 
 // ─── Build navigation sections per role ──────────────────────
 // Priority: Checker → Treasury → Operations → Salesman → Admin → fallback
-function buildNavSections(roles: string[]): NavSection[] {
+// `showManufacturing` comes from the Trading | Manufacturer mode toggle —
+// trading mode hides the Manufacturing entry, manufacturer mode shows it.
+function buildNavSections(roles: string[], showManufacturing = true): NavSection[] {
   const isAdmin = roles.includes("factor_admin") || roles.includes("super_admin");
   const isChecker = roles.includes("checker");
   const isTreasury = roles.includes("treasury");
@@ -221,8 +225,22 @@ function buildNavSections(roles: string[]): NavSection[] {
     to: "/app/marketplace",
   };
 
+  // Manufacturing — visible to operations + admin, and only in manufacturer
+  // mode. The workbench hosts Overview / Batches / Updates / Factory Issues /
+  // Quality / Dispatch Readiness / Tally Export as in-page tabs.
+  const manufacturingSection: NavSection | null =
+    (isOperations || isAdmin) && showManufacturing
+      ? {
+          type: "single",
+          label: "Manufacturing",
+          icon: Factory,
+          to: "/app/manufacturer-workbench",
+        }
+      : null;
+
   // Assemble in the desired order: Dashboard, My Queue, Checker, Finance,
-  // Procurement, Sales, Marketplace Hub, Product Catalogue, Warehouse Control, Reports, System
+  // Procurement, Sales, Marketplace Hub, Product Catalogue, Warehouse Control,
+  // Manufacturing, Reports, System
   const sections = [
     dashboardSection,
     myQueueSection,
@@ -235,6 +253,7 @@ function buildNavSections(roles: string[]): NavSection[] {
     ...salesRepExtras,
     catalogueSection,
     warehouseControlSection,
+    manufacturingSection,
     ...reportsSections,
     systemSection,
   ].filter((s: any): s is NavSection => s != null) as NavSection[];
@@ -382,6 +401,11 @@ function AppLayout() {
       "/app/sample-distribution",
     ];
 
+    // Manufacturing routes (new reusable module — operations + admin)
+    const manufacturingRoutes: string[] = [
+      "/app/manufacturer-workbench",
+    ];
+
     // Include all warehouse-control routes for admin (they have full access)
     const adminAllowedRoutes = [
       "/app/dashboard",
@@ -401,6 +425,7 @@ function AppLayout() {
       ...naughtyListRoutes,
       ...catalogueRoutes,
       ...warehouseControlRoutes,
+      ...manufacturingRoutes,
     ];
 
     const operationsAllowed: string[] = [
@@ -417,6 +442,7 @@ function AppLayout() {
       ...naughtyListRoutes,
       ...catalogueRoutes,
       ...warehouseControlRoutes,
+      ...manufacturingRoutes,
     ];
 
     // Quick admin allowed routes (for admin quick items)
@@ -524,7 +550,9 @@ function AppLayout() {
   // In view-as mode the sidebar mirrors the team member's own tabs (e.g. a
   // salesperson sees CRM / Leads, Debtors, Suppliers + their Workspace);
   // otherwise it reflects the signed-in user's roles.
-  const navSections = buildNavSections(effectiveRoles);
+  // Trading | Manufacturer mode toggle filters the Manufacturing entry.
+  const { mode: businessMode } = useBusinessMode();
+  const navSections = buildNavSections(effectiveRoles, businessMode === "manufacturer");
 
   // Current page label, shown in the top bar for orientation.
   const currentPage = (() => {
