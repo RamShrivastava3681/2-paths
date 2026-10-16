@@ -18,7 +18,7 @@ module.exports = {
       interpreter: "node",
       env: {
         NODE_ENV: "production",
-        PORT: 4040,
+        PORT: 7979,
       },
       env_file: "./backend/.env",
       instances: 1,

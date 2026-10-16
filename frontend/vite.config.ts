@@ -25,13 +25,13 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    // Dev only: forward /api calls to the Express backend (default port 4040)
-    // so the httpOnly session cookie works same-origin in the browser during
-    // development — exactly like Nginx does in production. Change the target
-    // if the backend runs on a different port.
+    // Dev only: forward /api calls to the Express backend (port 7979,
+    // matching backend PORT) so the httpOnly session cookie works
+    // same-origin in the browser during development — exactly like Nginx
+    // does in production.
     proxy: {
       "/api": {
-        target: "http://localhost:4040",
+        target: "http://localhost:7979",
         changeOrigin: true,
       },
     },

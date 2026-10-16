@@ -67,7 +67,7 @@ backend/dist/
 ### Backend (`backend/.env`)
 
 ```bash
-PORT=4040
+PORT=7979
 NODE_ENV=production
 JWT_SECRET=<your-secret>
 JWT_EXPIRES_IN=7d
@@ -75,14 +75,14 @@ AWS_REGION=ap-south-1
 AWS_ACCESS_KEY_ID=<your-aws-key>
 AWS_SECRET_ACCESS_KEY=<your-aws-secret>
 DYNAMODB_TABLE=adventra
-CORS_ORIGIN=https://adventra.whizunikhub.com
+CORS_ORIGIN=https://demo.whizunikhub.com
 ```
 
 ### Frontend (`frontend/.env`)
 
 ```bash
 VITE_API_URL=/api
-VITE_FRONTEND_URL=https://adventra.whizunikhub.com
+VITE_FRONTEND_URL=https://demo.whizunikhub.com
 ```
 
 > ⚠️ **Important**: `VITE_*` env vars are baked into the JS bundle at build time.
@@ -135,9 +135,10 @@ sudo nano /etc/nginx/sites-available/adventra
 ```
 
 **Key changes to make:**
-1. Replace `adventra.whizunikhub.com` with your actual domain
+1. Confirm `server_name` is `demo.whizunikhub.com`
 2. Update the `root` path to point to `frontend/dist/` on your server
-3. Set up SSL certificates (see Section 6)
+3. Confirm the `/api/` proxy points at `http://127.0.0.1:7979` (the backend `PORT`)
+4. Set up SSL certificates (see Section 6)
 
 Enable the site:
 
@@ -150,7 +151,7 @@ sudo systemctl reload nginx
 ### How the Nginx config works
 
 - `/assets/*` — served directly with a 1-year cache header (immutable hashed files)
-- `/api/*` — proxied to the backend Express server (port 4040)
+- `/api/*` — proxied to the backend Express server (port 7979)
 - Everything else — serves `index.html` so TanStack Router can handle client-side routing
   (this is the **SPA fallback** pattern)
 
@@ -160,7 +161,7 @@ sudo systemctl reload nginx
 
 ```bash
 sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d adventra.whizunikhub.com
+sudo certbot --nginx -d demo.whizunikhub.com
 ```
 
 Certbot will automatically update the Nginx config with SSL certificates and set up
@@ -175,10 +176,10 @@ auto-renewal.
 pm2 status
 
 # Test the frontend
-curl -I https://adventra.whizunikhub.com
+curl -I https://demo.whizunikhub.com
 
 # Test the backend API
-curl https://adventra.whizunikhub.com/api/health
+curl https://demo.whizunikhub.com/api/health
 
 # Check Nginx
 sudo nginx -t
