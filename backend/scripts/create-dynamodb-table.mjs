@@ -57,12 +57,12 @@ await client.send(
     TableName: tableName,
     BillingMode: "PAY_PER_REQUEST",
     AttributeDefinitions: [
-      { AttributeName: "pk", Type: "S" },
-      { AttributeName: "sk", Type: "S" },
-      { AttributeName: "gsi1pk", Type: "S" },
-      { AttributeName: "gsi1sk", Type: "S" },
-      { AttributeName: "gsi2pk", Type: "S" },
-      { AttributeName: "gsi2sk", Type: "S" },
+      { AttributeName: "pk", AttributeType: "S" },
+      { AttributeName: "sk", AttributeType: "S" },
+      { AttributeName: "gsi1pk", AttributeType: "S" },
+      { AttributeName: "gsi1sk", AttributeType: "S" },
+      { AttributeName: "gsi2pk", AttributeType: "S" },
+      { AttributeName: "gsi2sk", AttributeType: "S" },
     ],
     KeySchema: [
       { AttributeName: "pk", KeyType: "HASH" },
