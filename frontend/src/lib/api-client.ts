@@ -768,11 +768,15 @@ const api = {
       list: () => api.get<any[]>("/manufacturing-batches"),
       get: (id: string) => api.get<any>(`/manufacturing-batches/${id}`),
       create: (data: any) => api.post<any>("/manufacturing-batches", data),
+      transition: (id: string, status: string, notes?: string) =>
+        api.post<any>(`/manufacturing-batches/${id}/transition`, { status, notes }),
+      setBom: (id: string, bom: any[]) => api.put<any>(`/manufacturing-batches/${id}/bom`, { bom }),
+      readiness: (id: string) => api.get<any>(`/manufacturing-batches/${id}/readiness`),
       complete: (id: string) => api.post<any>(`/manufacturing-batches/${id}/complete`, {}),
       hold: (id: string, remarks?: string) =>
         api.post<any>(`/manufacturing-batches/${id}/hold`, { remarks }),
-      release: (id: string, remarks?: string) =>
-        api.post<any>(`/manufacturing-batches/${id}/release`, { remarks }),
+      release: (id: string, remarks?: string, qty?: number | null, idempotencyKey?: string) =>
+        api.post<any>(`/manufacturing-batches/${id}/release`, { remarks, qty, idempotencyKey }),
       allocate: (id: string, qty: number) =>
         api.post<any>(`/manufacturing-batches/${id}/allocate`, { qty }),
     },
@@ -803,6 +807,36 @@ const api = {
       }) => api.post<any>("/material-issues", data),
     },
     overview: () => api.get<any>("/manufacturer-overview"),
+    workflow: () => api.get<any>("/manufacturer-workflow"),
+    reservations: {
+      list: (batchId?: string) =>
+        api.get<any[]>(`/material-reservations${batchId ? `?batchId=${encodeURIComponent(batchId)}` : ""}`),
+      create: (data: any) => api.post<any>("/material-reservations", data),
+      release: (id: string, consumed?: boolean) =>
+        api.post<any>(`/material-reservations/${id}/release`, { consumed }),
+    },
+    inspections: {
+      list: (batchId?: string) =>
+        api.get<any[]>(`/quality-inspections${batchId ? `?batchId=${encodeURIComponent(batchId)}` : ""}`),
+      create: (data: any) => api.post<any>("/quality-inspections", data),
+      decide: (id: string, data: { outcome: string; releaseQty?: number | null; remarks?: string; idempotencyKey?: string }) =>
+        api.post<any>(`/quality-inspections/${id}/decide`, data),
+    },
+    correctiveActions: {
+      list: (batchId?: string) =>
+        api.get<any[]>(`/corrective-actions${batchId ? `?batchId=${encodeURIComponent(batchId)}` : ""}`),
+      create: (data: any) => api.post<any>("/corrective-actions", data),
+      setStatus: (id: string, status: string, notes?: string) =>
+        api.post<any>(`/corrective-actions/${id}/status`, { status, notes }),
+    },
+    handoffs: {
+      list: (status?: string) =>
+        api.get<any[]>(`/accounting-handoffs${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+      prepare: (data: any) => api.post<any>("/accounting-handoffs", data),
+      send: (id: string, opts?: { forceFail?: boolean; failReason?: string }) =>
+        api.post<any>(`/accounting-handoffs/${id}/send`, opts ?? {}),
+      cancel: (id: string) => api.post<any>(`/accounting-handoffs/${id}/cancel`, {}),
+    },
     tallyPreview: () => api.get<any>("/tally-export-preview"),
   },
 

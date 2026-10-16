@@ -111,6 +111,107 @@ router.post("/manufacturing-batches/:id/complete", async (req, res) => {
   }
 });
 
+// Lifecycle transition: draft → planned → ready_to_start → in_progress →
+// completed (auto quality_review) → released, plus on_hold / rework /
+// rejected / cancelled. Guards (materials ready, quality released) enforced.
+router.post("/manufacturing-batches/:id/transition", async (req, res) => {
+  try {
+    const to = req.body?.status;
+    if (typeof to !== "string") return res.status(400).json({ error: "status is required" });
+    const fresh = await Mfg.transitionBatch(
+      req.params.id,
+      req.user!.userId,
+      to as Mfg.BatchStatus,
+      req.user!.userId,
+      req.body?.notes ?? null
+    );
+    if (!fresh) return res.status(404).json({ error: "Not found" });
+    res.json({ ...fresh, availableQty: Mfg.availableQty(fresh), progress: Mfg.batchProgress(fresh) });
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+// Replace the BOM on a batch that has not started production.
+router.put("/manufacturing-batches/:id/bom", async (req, res) => {
+  try {
+    const fresh = await Mfg.setBatchBom(req.params.id, req.user!.userId, req.body?.bom ?? []);
+    if (!fresh) return res.status(404).json({ error: "Not found" });
+    res.json(fresh);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+// Material readiness decision (Stages B–C): required vs available vs
+// reserved vs incoming PO qty → ready | partial | blocked.
+router.get("/manufacturing-batches/:id/readiness", async (req, res) => {
+  try {
+    res.json(await Mfg.computeReadiness(req.user!.userId, req.params.id));
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Material reservations — soft-allocate raw stock (never moves stock)
+// ---------------------------------------------------------------------------
+
+router.get("/material-reservations", async (req, res) => {
+  try {
+    const batchId = typeof req.query.batchId === "string" ? req.query.batchId : undefined;
+    res.json(await Mfg.listReservations(req.user!.userId, batchId));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/material-reservations", async (req, res) => {
+  try {
+    const qty = Number(req.body?.qty);
+    const item = await Mfg.reserveMaterial({
+      clientId: req.user!.userId,
+      batchId: req.body?.batchId ?? null,
+      salesOrderNumber: req.body?.salesOrderNumber ?? null,
+      productId: req.body?.productId,
+      sku: req.body?.sku ?? null,
+      qty,
+      createdBy: req.user!.userId,
+    });
+    res.status(201).json(item);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+router.post("/material-reservations/:id/release", async (req, res) => {
+  try {
+    const item = await Mfg.releaseReservation(req.params.id, req.user!.userId, !!req.body?.consumed);
+    if (!item) return res.status(404).json({ error: "Not found" });
+    res.json(item);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+async function requireQuality(req: any, res: any): Promise<boolean> {
+  const roles: string[] = req.user!.roles || [];
+  const cfg = await Mfg.getConfig(req.user!.userId);
+  const canQuality =
+    roles.includes("factor_admin") ||
+    roles.includes("super_admin") ||
+    cfg.qualityRoles.some((r) => roles.includes(r));
+  if (!canQuality) {
+    res.status(403).json({ error: "Only an authorised quality role can hold or release a batch" });
+    return false;
+  }
+  return true;
+}
+
 async function transitionQuality(
   req: any,
   res: any,
@@ -119,16 +220,24 @@ async function transitionQuality(
   try {
     const b = await Mfg.getBatch(req.params.id);
     if (!ownBatch(b, req.user!.userId)) return res.status(404).json({ error: "Not found" });
-    const roles: string[] = req.user!.roles || [];
-    const cfg = await Mfg.getConfig(req.user!.userId);
-    const canQuality =
-      roles.includes("factor_admin") ||
-      roles.includes("super_admin") ||
-      cfg.qualityRoles.some((r) => roles.includes(r));
-    // Both Hold and Release are quality-gated: only an authorised quality
-    // role may move a batch in or out of Hold (E2E Steps 13–14).
-    if (!canQuality) {
-      return res.status(403).json({ error: "Only an authorised quality role can hold or release a batch" });
+    if (!(await requireQuality(req, res))) return;
+    if (to === "Released") {
+      // Partial-release aware + idempotent: pass qty + key through.
+      const qty = req.body?.qty ?? null;
+      const key = req.body?.idempotencyKey ?? `release-${b!.id}-${Date.now()}`;
+      try {
+        const { batch, duplicate, releasedNow } = await Mfg.releaseBatch({
+          id: b!.id,
+          clientId: req.user!.userId,
+          qty,
+          idempotencyKey: key,
+          by: req.user!.userId,
+          remarks: req.body?.remarks ?? null,
+        });
+        return res.status(duplicate ? 200 : 201).json({ ...batch, availableQty: Mfg.availableQty(batch), duplicate, releasedNow });
+      } catch (err: any) {
+        return res.status(err?.statusCode ?? 400).json({ error: err.message, code: err.code });
+      }
     }
     const review: Mfg.QualityReview = {
       by: req.user!.userId,
@@ -138,16 +247,13 @@ async function transitionQuality(
       remarks: req.body?.remarks ?? null,
     };
     const { updateItem } = await import("../dynamodb.js");
+    // Hold retains releasedQty history — availableQty() reports zero while
+    // qualityStatus is not Released, so held goods can never allocate.
     const patch: Record<string, any> = {
       qualityStatus: to,
       qualityReviews: [...(b!.qualityReviews || []), review],
       updatedAt: new Date().toISOString(),
     };
-    // Release snapshots the produced good quantity as releasable stock.
-    // Re-hold gates it again: previously released units become unavailable
-    // until the next release re-snapshots them.
-    if (to === "Released") patch.releasedQty = Number(b!.producedGoodQty || 0);
-    if (to === "Hold") patch.releasedQty = 0;
     await updateItem(b!.pk, b!.sk, patch);
     const fresh = await Mfg.getBatch(b!.id);
     res.json({ ...fresh, availableQty: Mfg.availableQty(fresh!) });
@@ -209,7 +315,11 @@ router.post("/production-updates", async (req, res) => {
       stage: req.body?.stage,
       qtyGood: req.body?.qtyGood,
       qtyRejected: req.body?.qtyRejected ?? 0,
+      qtyRework: req.body?.qtyRework ?? 0,
       lineStatus: req.body?.lineStatus ?? "running",
+      machineStatus: req.body?.machineStatus ?? null,
+      staffingStatus: req.body?.staffingStatus ?? null,
+      utilityStatus: req.body?.utilityStatus ?? null,
       remarks: req.body?.remarks ?? null,
       idempotencyKey: req.body?.idempotencyKey,
       createdBy: req.user!.userId,
@@ -278,6 +388,9 @@ router.post("/factory-issues", async (req, res) => {
       description: req.body?.description ?? null,
       owner: req.body?.owner ?? null,
       expectedResolutionAt: req.body?.expectedResolutionAt ?? null,
+      severity: req.body?.severity ?? "medium",
+      correctiveAction: req.body?.correctiveAction ?? null,
+      resolutionNotes: req.body?.resolutionNotes ?? null,
       createdBy: req.user!.userId,
     });
     res.status(201).json(issue);
@@ -308,7 +421,12 @@ router.post("/factory-issues/:id/status", async (req, res) => {
       req.user!.userId,
       to,
       req.user!.userId,
-      req.body?.owner ?? undefined
+      req.body?.owner ?? undefined,
+      {
+        severity: req.body?.severity,
+        correctiveAction: req.body?.correctiveAction,
+        resolutionNotes: req.body?.resolutionNotes,
+      }
     );
     if (!updated) return res.status(404).json({ error: "Not found" });
     res.json(updated);
@@ -326,14 +444,14 @@ router.get("/manufacturer-overview", async (req, res) => {
   try {
     const clientId = req.user!.userId;
     const [batches, issues] = await Promise.all([Mfg.listBatches(clientId), Mfg.listIssues(clientId)]);
-    const openIssues = issues.filter((i) => i.status === "open");
+    const openIssues = issues.filter((i) => i.status !== "closed");
     const heldQty = batches
       .filter((b) => b.qualityStatus === "Hold" || b.qualityStatus === "Pending")
-      .reduce((s, b) => s + Number(b.producedGoodQty || 0), 0);
+      .reduce((s, b) => s + Math.max(0, Number(b.producedGoodQty || 0) - Number(b.releasedQty || 0)), 0);
     const releasedReady = batches.reduce((s, b) => s + Mfg.availableQty(b), 0);
     res.json({
-      batches: batches.map((b) => ({ ...b, availableQty: Mfg.availableQty(b) })),
-      openBatchCount: batches.filter((b) => b.status === "planned" || b.status === "in_progress").length,
+      batches: batches.map((b) => ({ ...b, availableQty: Mfg.availableQty(b), progress: Mfg.batchProgress(b) })),
+      openBatchCount: batches.filter((b) => !["closed", "cancelled", "rejected", "released"].includes(b.status)).length,
       totalGood: batches.reduce((s, b) => s + Number(b.producedGoodQty || 0), 0),
       totalRejected: batches.reduce((s, b) => s + Number(b.rejectedQty || 0), 0),
       heldQty,
@@ -343,6 +461,176 @@ router.get("/manufacturer-overview", async (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Control-center aggregation: real-data KPIs + pipeline + attention + activity.
+router.get("/manufacturer-workflow", async (req, res) => {
+  try {
+    res.json(await Mfg.workflowOverview(req.user!.userId));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Quality inspections + corrective actions (Stage H)
+// ---------------------------------------------------------------------------
+
+router.get("/quality-inspections", async (req, res) => {
+  try {
+    const batchId = typeof req.query.batchId === "string" ? req.query.batchId : undefined;
+    res.json(await Mfg.listInspections(req.user!.userId, batchId));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/quality-inspections", async (req, res) => {
+  try {
+    const item = await Mfg.createInspection({
+      clientId: req.user!.userId,
+      batchId: req.body?.batchId,
+      inspectedQty: req.body?.inspectedQty,
+      acceptedQty: req.body?.acceptedQty,
+      rejectedQty: req.body?.rejectedQty ?? 0,
+      reworkQty: req.body?.reworkQty ?? 0,
+      defectCategories: req.body?.defectCategories ?? [],
+      checklist: req.body?.checklist ?? [],
+      docs: req.body?.docs ?? [],
+      remarks: req.body?.remarks ?? null,
+      createdBy: req.user!.userId,
+    });
+    res.status(201).json(item);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+// Quality decision — quality-role gated. released reconciles against accepted
+// output and performs the (partial) release; hold opens the corrective loop.
+router.post("/quality-inspections/:id/decide", async (req, res) => {
+  try {
+    if (!(await requireQuality(req, res))) return;
+    const item = await Mfg.decideInspection({
+      id: req.params.id,
+      clientId: req.user!.userId,
+      outcome: req.body?.outcome,
+      releaseQty: req.body?.releaseQty ?? null,
+      inspector: req.user!.userId,
+      remarks: req.body?.remarks ?? null,
+      idempotencyKey: req.body?.idempotencyKey ?? null,
+    });
+    res.json(item);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+router.get("/corrective-actions", async (req, res) => {
+  try {
+    const batchId = typeof req.query.batchId === "string" ? req.query.batchId : undefined;
+    res.json(await Mfg.listCorrectiveActions(req.user!.userId, batchId));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/corrective-actions", async (req, res) => {
+  try {
+    const item = await Mfg.createCorrectiveAction({
+      clientId: req.user!.userId,
+      batchId: req.body?.batchId ?? null,
+      inspectionId: req.body?.inspectionId ?? null,
+      issueId: req.body?.issueId ?? null,
+      title: req.body?.title,
+      description: req.body?.description ?? null,
+      assignee: req.body?.assignee ?? null,
+      dueDate: req.body?.dueDate ?? null,
+      createdBy: req.user!.userId,
+    });
+    res.status(201).json(item);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/corrective-actions/:id/status", async (req, res) => {
+  try {
+    const item = await Mfg.transitionCorrectiveAction(
+      req.params.id,
+      req.user!.userId,
+      req.body?.status,
+      req.user!.userId,
+      req.body?.notes ?? null
+    );
+    if (!item) return res.status(404).json({ error: "Not found" });
+    res.json(item);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Accounting handoffs — Tally / IRN / e-way bill queue (Stage K)
+// ---------------------------------------------------------------------------
+
+router.get("/accounting-handoffs", async (req, res) => {
+  try {
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    res.json(await Mfg.listHandoffs(req.user!.userId, status));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/accounting-handoffs", async (req, res) => {
+  try {
+    const { handoff, duplicate } = await Mfg.prepareHandoff({
+      clientId: req.user!.userId,
+      kind: req.body?.kind,
+      docType: req.body?.docType ?? "invoice",
+      docId: req.body?.docId,
+      docNumber: req.body?.docNumber ?? null,
+      batchId: req.body?.batchId ?? null,
+      customer: req.body?.customer ?? null,
+      amount: req.body?.amount ?? null,
+      voucherType: req.body?.voucherType ?? null,
+      idempotencyKey: req.body?.idempotencyKey,
+      createdBy: req.user!.userId,
+    });
+    res.status(duplicate ? 200 : 201).json({ ...handoff, duplicate });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Send / retry through the sandbox adapter. forceFail supports the
+// fail-then-retry demo; production retries omit it.
+router.post("/accounting-handoffs/:id/send", async (req, res) => {
+  try {
+    const item = await Mfg.sendHandoff(req.params.id, req.user!.userId, req.user!.userId, {
+      forceFail: !!req.body?.forceFail,
+      failReason: req.body?.failReason,
+    });
+    res.json(item);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+router.post("/accounting-handoffs/:id/cancel", async (req, res) => {
+  try {
+    const item = await Mfg.cancelHandoff(req.params.id, req.user!.userId, req.user!.userId);
+    if (!item) return res.status(404).json({ error: "Not found" });
+    res.json(item);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message });
   }
 });
 

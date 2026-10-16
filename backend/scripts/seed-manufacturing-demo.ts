@@ -26,7 +26,7 @@ if (!clientId) {
 
 async function main() {
   if (reset) {
-    for (const t of ["ManufacturingBatch", "ProductionUpdate", "FactoryIssue"] as const) {
+    for (const t of ["ManufacturingBatch", "ProductionUpdate", "FactoryIssue", "MaterialIssue", "MaterialReservation", "QualityInspection", "CorrectiveAction", "AccountingHandoff"] as const) {
       const all = await db.scanByType(t, { limit: 2000 });
       const own = all.filter((r: any) => r.clientId === clientId);
       for (const r of own) await db.deleteItem(r.pk, r.sk);
@@ -100,9 +100,54 @@ async function main() {
     title: "Demo stoppage — conveyor jam on Line 1",
     description: "Seeded demo issue with owner and open status",
     owner: "Demo floor supervisor",
+    severity: "high",
+    expectedResolutionAt: new Date(Date.now() + 2 * 86400000).toISOString(),
     createdBy: clientId,
   });
   console.log("  ✅ 1 open factory issue (owner assigned)");
+
+  // Best-effort control-center demo rows (never fail the seed if stock is absent).
+  try {
+    await Mfg.setBatchBom(batch.id, clientId, [
+      { productId: "DEMO-LATEX", sku: "DEMO-LATEX", productName: "Demo latex", qtyPerUnit: 0.01, category: "fabric" },
+    ]);
+    await Mfg.createInspection({
+      clientId,
+      batchId: batch.id,
+      inspectedQty: 9000,
+      acceptedQty: 8800,
+      rejectedQty: 200,
+      remarks: "Demo inspection — hold pending recheck",
+      createdBy: clientId,
+    });
+    const insp = (await Mfg.listInspections(clientId, batch.id))[0];
+    if (insp) {
+      await Mfg.createCorrectiveAction({
+        clientId,
+        batchId: batch.id,
+        inspectionId: insp.id,
+        title: "Demo corrective action — recheck dried batch",
+        assignee: "Demo quality lead",
+        createdBy: clientId,
+      });
+    }
+    const { handoff } = await Mfg.prepareHandoff({
+      clientId,
+      kind: "tally",
+      docType: "invoice",
+      docId: "DEMO-INV-1",
+      docNumber: "DEMO-INV-1",
+      batchId: batch.id,
+      customer: "Demo customer",
+      amount: 120000,
+      idempotencyKey: `demo-ho-${batch.id}`,
+      createdBy: clientId,
+    });
+    await Mfg.sendHandoff(handoff.id, clientId, clientId, { forceFail: true, failReason: "Demo failure — retry me from Tally Export" });
+    console.log("  ✅ demo inspection + corrective action + failed handoff (retry from Tally Export)");
+  } catch (e: any) {
+    console.log(`  ⚠ optional demo rows skipped: ${e.message}`);
+  }
   console.log("Done. Next: complete → Hold → verify allocate BLOCKED → Release → allocate → dispatch.");
 }
 
