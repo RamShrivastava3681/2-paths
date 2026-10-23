@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { authMiddleware } from "../middleware/auth.js";
 import * as Mfg from "../models/manufacturing.js";
+import * as GoodsSO from "../models/goods-sales-order.js";
+import * as GoodsPO from "../models/goods-purchase-order.js";
+import * as GoodsDispatch from "../models/goods-dispatch.js";
+import * as Bom from "../models/bom.js";
 
 const router = Router();
 
@@ -140,6 +144,176 @@ router.put("/manufacturing-batches/:id/bom", async (req, res) => {
     const fresh = await Mfg.setBatchBom(req.params.id, req.user!.userId, req.body?.bom ?? []);
     if (!fresh) return res.status(404).json({ error: "Not found" });
     res.json(fresh);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Bill of Materials (one approved BOM per product style, basic versioning)
+// ---------------------------------------------------------------------------
+
+router.get("/boms", async (req, res) => {
+  try {
+    const boms = await Bom.list(req.user!.userId);
+    res.json(boms);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/boms/product/:productId", async (req, res) => {
+  try {
+    const boms = await Bom.getByProduct(req.user!.userId, req.params.productId);
+    res.json(boms);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/boms", async (req, res) => {
+  try {
+    const body = req.body || {};
+    if (!body.productId) return res.status(400).json({ error: "productId is required" });
+    if (!Array.isArray(body.lines) || body.lines.length === 0) {
+      return res.status(400).json({ error: "lines must be a non-empty array" });
+    }
+    const item = await Bom.create({
+      clientId: req.user!.userId,
+      productId: body.productId,
+      sku: body.sku ?? null,
+      productName: body.productName ?? null,
+      lines: body.lines,
+      createdBy: req.user!.userId,
+    });
+    res.status(201).json(item);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+router.put("/boms/:id", async (req, res) => {
+  try {
+    const fresh = await Bom.update(
+      req.params.id,
+      req.user!.userId,
+      { lines: req.body?.lines, productName: req.body?.productName, sku: req.body?.sku },
+      req.user!.userId,
+    );
+    if (!fresh) return res.status(404).json({ error: "Not found" });
+    res.json(fresh);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+router.post("/boms/:id/approve", async (req, res) => {
+  try {
+    const fresh = await Bom.approve(req.params.id, req.user!.userId, req.user!.userId);
+    if (!fresh) return res.status(404).json({ error: "Not found" });
+    res.json(fresh);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+router.post("/boms/:id/archive", async (req, res) => {
+  try {
+    const fresh = await Bom.archive(req.params.id, req.user!.userId, req.user!.userId);
+    if (!fresh) return res.status(404).json({ error: "Not found" });
+    res.json(fresh);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+router.delete("/boms/:id", async (req, res) => {
+  try {
+    const ok = await Bom.remove(req.params.id, req.user!.userId);
+    if (!ok) return res.status(404).json({ error: "Not found" });
+    res.json({ success: true });
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Sales Order → automatic material requirement calculation (approved BOM)
+// ---------------------------------------------------------------------------
+
+router.get("/sales-orders/:soId/material-requirements", async (req, res) => {
+  try {
+    const result = await Bom.calculateSoMaterialRequirements(req.user!.userId, req.params.soId);
+    res.json(result);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+// Create a manufacturing batch from a confirmed SO, populated from the
+// product's approved BOM (version frozen onto the batch).
+router.post("/manufacturing-demand/create-batch-from-approved-bom", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const salesOrderId = body.salesOrderId;
+    const productId = body.productId;
+    const targetQty = Number(body.targetQty);
+    if (!salesOrderId || !productId) {
+      return res.status(400).json({ error: "salesOrderId and productId are required" });
+    }
+    if (!Number.isFinite(targetQty) || targetQty <= 0) {
+      return res.status(400).json({ error: "targetQty must be > 0" });
+    }
+
+    // Prevent duplicate batch for same SO + product.
+    const existing = await Mfg.findExistingBatchForDemand(req.user!.userId, salesOrderId, productId);
+    if (existing) {
+      return res.status(409).json({
+        error: `Batch ${existing.batchNumber} already exists for SO ${salesOrderId} and product ${productId}`,
+        existingBatch: existing,
+      });
+    }
+
+    const so = await GoodsSO.get(salesOrderId);
+    if (!so || so.clientId !== req.user!.userId) {
+      return res.status(404).json({ error: "Sales order not found" });
+    }
+
+    const line = (so.lines ?? []).find((l: any) => l.productId === productId);
+    if (!line) {
+      return res.status(400).json({ error: "Product not found on this Sales Order" });
+    }
+
+    const result = await Mfg.createBatchFromApprovedBOM({
+      clientId: req.user!.userId,
+      salesOrderId: so.id,
+      salesOrderNumber: so.soNumber ?? null,
+      productId: line.productId,
+      sku: line.sku ?? null,
+      productName: line.name ?? null,
+      targetQty,
+      deliveryDate: so.expectedDeliveryDate ?? null,
+      priority: null,
+      createdBy: req.user!.userId,
+    });
+
+    if (result.missingBom) {
+      return res.status(409).json({
+        error: `No approved BOM for product ${productId} — create and approve a BOM before planning production`,
+        missingBom: true,
+        productId,
+        productName: line.name ?? null,
+      });
+    }
+
+    res.status(201).json({ ...result.batch, availableQty: Mfg.availableQty(result.batch!) });
   } catch (err: any) {
     const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
     res.status(status).json({ error: err.message, code: err.code });
@@ -699,6 +873,341 @@ router.get("/tally-export-preview", async (req, res) => {
       })),
       generatedAt: new Date().toISOString(),
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Sales Order → Manufacturing Demand Automation
+// ---------------------------------------------------------------------------
+
+// Get outstanding manufacturing demand for a product (confirmed SO qty − dispatched − allocated).
+router.get("/manufacturing-demand/outstanding", async (req, res) => {
+  try {
+    const productId = req.query.productId as string | undefined;
+    if (!productId) return res.status(400).json({ error: "productId is required" });
+    const demand = await Mfg.getOutstandingDemand(req.user!.userId, productId);
+    res.json(demand);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Suggest batches for all confirmed SO lines with outstanding demand and no existing batch.
+router.get("/manufacturing-demand/suggest-batches", async (req, res) => {
+  try {
+    const suggestions = await Mfg.suggestBatchesForDemand(req.user!.userId);
+    res.json(suggestions);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create a manufacturing batch pre-filled from a confirmed Sales Order.
+router.post("/manufacturing-demand/create-batch-from-so", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const salesOrderId = body.salesOrderId;
+    const productId = body.productId;
+    const targetQty = Number(body.targetQty);
+    if (!salesOrderId || !productId) {
+      return res.status(400).json({ error: "salesOrderId and productId are required" });
+    }
+    if (!Number.isFinite(targetQty) || targetQty <= 0) {
+      return res.status(400).json({ error: "targetQty must be > 0" });
+    }
+
+    // Prevent duplicate batch for same SO + product.
+    const existing = await Mfg.findExistingBatchForDemand(req.user!.userId, salesOrderId, productId);
+    if (existing) {
+      return res.status(409).json({
+        error: `Batch ${existing.batchNumber} already exists for SO ${salesOrderId} and product ${productId}`,
+        existingBatch: existing,
+      });
+    }
+
+    const so = await GoodsSO.get(salesOrderId);
+    if (!so || so.clientId !== req.user!.userId) {
+      return res.status(404).json({ error: "Sales order not found" });
+    }
+
+    const line = (so.lines ?? []).find((l: any) => l.productId === productId);
+    if (!line) {
+      return res.status(400).json({ error: "Product not found on this Sales Order" });
+    }
+
+    const batch = await Mfg.createBatchFromSO({
+      clientId: req.user!.userId,
+      salesOrderId: so.id,
+      salesOrderNumber: so.soNumber ?? null,
+      productId: line.productId,
+      sku: line.sku ?? null,
+      productName: line.name ?? null,
+      targetQty,
+      deliveryDate: so.expectedDeliveryDate ?? null,
+      priority: null,
+      createdBy: req.user!.userId,
+    });
+    res.status(201).json(batch);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+// Recalculate demand after a Sales Order is confirmed, amended, or cancelled.
+router.post("/manufacturing-demand/recalculate", async (req, res) => {
+  try {
+    const salesOrderId = req.body?.salesOrderId as string | undefined;
+    if (!salesOrderId) return res.status(400).json({ error: "salesOrderId is required" });
+    const results = await Mfg.recalculateDemandOnSOChange(req.user!.userId, salesOrderId);
+    res.json({ salesOrderId, demands: results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Material Readiness Automation
+// ---------------------------------------------------------------------------
+
+// Refresh material readiness for all batches using a product (called after stock changes).
+router.post("/material-readiness/refresh", async (req, res) => {
+  try {
+    const productId = req.body?.productId as string | undefined;
+    if (!productId) return res.status(400).json({ error: "productId is required" });
+    const affected = await Mfg.refreshReadinessOnStockChange(req.user!.userId, productId);
+    res.json({ productId, affectedBatches: affected });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Auto-transition a batch to ready_to_start when materials are ready.
+router.post("/material-readiness/auto-transition/:batchId", async (req, res) => {
+  try {
+    const batch = await Mfg.autoTransitionToReadyToStart(req.params.batchId, req.user!.userId);
+    if (!batch) return res.status(400).json({ error: "Batch not found or materials not ready" });
+    res.json(batch);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PO → GRN Automation
+// ---------------------------------------------------------------------------
+
+// Get outstanding POs for a product (helps procurement identify what to receive).
+router.get("/manufacturing/po-outstanding", async (req, res) => {
+  try {
+    const productId = req.query.productId as string | undefined;
+    if (!productId) return res.status(400).json({ error: "productId is required" });
+    const outstanding = await GoodsPO.getOutstandingPOsForProduct(req.user!.userId, productId);
+    res.json(outstanding);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get overdue POs that affect production (outstanding qty on products used in active batches).
+router.get("/manufacturing/po-overdue", async (req, res) => {
+  try {
+    const clientId = req.user!.userId;
+    const pos = await GoodsPO.list(clientId);
+    const overdue: Array<{
+      poId: string;
+      poNumber: string | null;
+      supplierId: string | null;
+      supplierName: string | null;
+      warehouse: string | null;
+      expectedDeliveryDate: string | null;
+      status: string;
+      outstandingQty: number;
+      isOverdue: boolean;
+    }> = [];
+
+    for (const po of pos as GoodsPO.GoodsPurchaseOrder[]) {
+      if (po.status === "cancelled" || po.status === "fully_received") continue;
+      if (!GoodsPO.isPOOverdue(po)) continue;
+      const outstanding = GoodsPO.poOutstandingQty(po);
+      if (outstanding <= 0) continue;
+      overdue.push({
+        poId: po.id,
+        poNumber: po.poNumber ?? null,
+        supplierId: po.supplierId ?? null,
+        supplierName: po.supplierName ?? null,
+        warehouse: po.warehouse ?? null,
+        expectedDeliveryDate: po.expectedDeliveryDate ?? null,
+        status: po.status,
+        outstandingQty: outstanding,
+        isOverdue: true,
+      });
+    }
+
+    overdue.sort((a, b) => {
+      const da = a.expectedDeliveryDate ? new Date(a.expectedDeliveryDate).getTime() : Infinity;
+      const db = b.expectedDeliveryDate ? new Date(b.expectedDeliveryDate).getTime() : Infinity;
+      return da - db;
+    });
+
+    res.json(overdue);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Material Requirement Automation
+// ---------------------------------------------------------------------------
+
+// Get outstanding material requirement for a batch (BOM qty × target − confirmed issues).
+router.get("/material-requirement/:batchId", async (req, res) => {
+  try {
+    const requirement = await Mfg.getOutstandingMaterialRequirement(req.params.batchId);
+    res.json(requirement);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Production Progress Automation
+// ---------------------------------------------------------------------------
+
+// Get stalled batches (in_progress with no recent production update).
+router.get("/production/stalled", async (req, res) => {
+  try {
+    const thresholdHours = req.query.thresholdHours
+      ? Number(req.query.thresholdHours)
+      : undefined;
+    const stalled = await Mfg.getStalledBatches(req.user!.userId, thresholdHours);
+    res.json(stalled);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get production interruptions (stopped/maintenance lines on in-progress batches).
+router.get("/production/interruptions", async (req, res) => {
+  try {
+    const interruptions = await Mfg.getProductionInterruptions(req.user!.userId);
+    res.json(interruptions);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Pre-fill quality inspection values from a batch.
+router.get("/quality-inspection/prefill/:batchId", async (req, res) => {
+  try {
+    const prefill = await Mfg.prefillInspection(req.params.batchId, req.user!.userId);
+    res.json(prefill);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Finished Stock Allocation Automation
+// ---------------------------------------------------------------------------
+
+// Suggest allocations of released stock to confirmed Sales Orders.
+router.get("/allocation/suggestions", async (req, res) => {
+  try {
+    const suggestions = await Mfg.suggestAllocations(req.user!.userId);
+    res.json(suggestions);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Dispatch Automation
+// ---------------------------------------------------------------------------
+
+// Pre-fill dispatch values from a Sales Order.
+router.get("/dispatch/prefill/:soId", async (req, res) => {
+  try {
+    const prefill = await GoodsDispatch.prefillDispatch(req.user!.userId, req.params.soId);
+    res.json(prefill);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+// Validate dispatch quantities against outstanding SO quantities.
+router.post("/dispatch/validate", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const soId = body.soId;
+    const lines = body.lines;
+    if (!soId || !Array.isArray(lines)) return res.status(400).json({ error: "soId and lines are required" });
+    const validation = await GoodsDispatch.validateDispatchQuantities(req.user!.userId, soId, lines);
+    res.json(validation);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+// Get dispatches stuck in a pipeline stage beyond the threshold.
+router.get("/dispatch/stale", async (req, res) => {
+  try {
+    const thresholdHours = req.query.thresholdHours
+      ? Number(req.query.thresholdHours)
+      : undefined;
+    const stale = await GoodsDispatch.getStaleDispatches(req.user!.userId, thresholdHours);
+    res.json(stale);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Sales Invoice Automation
+// ---------------------------------------------------------------------------
+
+import * as Invoice from "../models/invoice.js";
+
+// Get dispatched quantities not yet invoiced.
+router.get("/invoice/uninvoiced", async (req, res) => {
+  try {
+    const uninvoiced = await Invoice.getUninvoicedDispatches(req.user!.userId);
+    res.json(uninvoiced);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Pre-fill invoice from a dispatched Sales Order.
+router.get("/invoice/prefill/:soId", async (req, res) => {
+  try {
+    const prefill = await Invoice.prefillInvoiceFromSO(req.user!.userId, req.params.soId);
+    res.json(prefill);
+  } catch (err: any) {
+    const status = err?.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 400;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+// Check for duplicate invoice (same SO + product + qty).
+router.post("/invoice/check-duplicate", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const salesOrderId = body.salesOrderId;
+    const productId = body.productId;
+    const qty = Number(body.qty);
+    if (!salesOrderId || !productId || !Number.isFinite(qty)) {
+      return res.status(400).json({ error: "salesOrderId, productId and qty are required" });
+    }
+    const duplicate = await Invoice.isDuplicateInvoice(req.user!.userId, salesOrderId, productId, qty);
+    res.json({ duplicate });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

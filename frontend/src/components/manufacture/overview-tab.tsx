@@ -50,6 +50,7 @@ export function OverviewTab({ onGoto }: { onGoto: (tab: string, filter?: string)
     { label: "Rejects", key: "rejects", tab: "batches" },
     { label: "Open issues", key: "openIssues", tab: "issues", filter: "open", tone: (k.openIssues ?? 0) > 0 ? "text-amber-600" : undefined },
     { label: "Overdue issues", key: "overdueIssues", tab: "issues", filter: "overdue", tone: (k.overdueIssues ?? 0) > 0 ? "text-red-600" : undefined },
+    { label: "Overdue orders", key: "overdueSoCount", tab: "batches", filter: "overdue", tone: (k.overdueSoCount ?? 0) > 0 ? "text-red-600" : undefined },
     { label: "Held / pending qty", key: "heldPendingQty", tab: "quality", tone: (k.heldPendingQty ?? 0) > 0 ? "text-amber-600" : undefined },
     { label: "Awaiting review", key: "awaitingReview", tab: "quality", tone: (k.awaitingReview ?? 0) > 0 ? "text-amber-600" : undefined },
     { label: "Released stock", key: "releasedStock", tab: "dispatch", tone: "text-emerald-600" },

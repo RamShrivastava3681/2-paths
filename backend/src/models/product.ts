@@ -73,6 +73,9 @@ export interface Product {
   gstRate: number | null;
   imageUrl: string | null;
   status: string;
+  /** Optimistic concurrency version for stock operations. Incremented on every
+   * stock-in or stock-out movement to prevent concurrent over-issue. */
+  stockVersion: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -151,6 +154,7 @@ export async function create(data: Partial<Product> & { clientId: string; name: 
     gstRate: data.gstRate ?? null,
     imageUrl: data.imageUrl || null,
     status: data.status || "active",
+    stockVersion: data.stockVersion ?? 0,
     createdAt: now,
     updatedAt: now,
   };
@@ -168,7 +172,7 @@ export async function update(id: string, updates: Partial<Product>) {
       throw new Error(`SKU already exists: ${updates.sku}`);
     }
   }
-  const allowed = ["name","description","category","subcategory","gender","brand","size","color","model","unitOfMeasure","season","barcode","barcodeType","unitsPerCarton","unitPrice","unitCost","mrp","ecommercePrice","retailerPrice","distributorPrice","flexiblePrice","minimumGrossMarginPercentage","reorderLevel","maxStock","leadTimeDays","safetyStockDays","supplierId","supplierProductCode","minimumOrderQuantity","orderMultiple","hsnCode","gstRate","imageUrl","status","sku","parentId","skuLevel","categoryMasterId","genderMasterId","colorMasterId","sizeMasterId","sizeSystem"];
+  const allowed = ["name","description","category","subcategory","gender","brand","size","color","model","unitOfMeasure","season","barcode","barcodeType","unitsPerCarton","unitPrice","unitCost","mrp","ecommercePrice","retailerPrice","distributorPrice","flexiblePrice","minimumGrossMarginPercentage","reorderLevel","maxStock","leadTimeDays","safetyStockDays","supplierId","supplierProductCode","minimumOrderQuantity","orderMultiple","hsnCode","gstRate","imageUrl","status","sku","parentId","skuLevel","categoryMasterId","genderMasterId","colorMasterId","sizeMasterId","sizeSystem","stockVersion"];
   const patch: Record<string, any> = {};
   for (const key of allowed) {
     if ((updates as any)[key] !== undefined) patch[key] = (updates as any)[key];

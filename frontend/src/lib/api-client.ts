@@ -780,6 +780,18 @@ const api = {
       allocate: (id: string, qty: number) =>
         api.post<any>(`/manufacturing-batches/${id}/allocate`, { qty }),
     },
+    boms: {
+      list: () => api.get<any[]>("/boms"),
+      getByProduct: (productId: string) =>
+        api.get<any[]>(`/boms/product/${encodeURIComponent(productId)}`),
+      create: (data: { productId: string; sku?: string | null; productName?: string | null; lines: any[] }) =>
+        api.post<any>("/boms", data),
+      update: (id: string, data: { lines?: any[]; productName?: string | null; sku?: string | null }) =>
+        api.put<any>(`/boms/${id}`, data),
+      approve: (id: string) => api.post<any>(`/boms/${id}/approve`, {}),
+      archive: (id: string) => api.post<any>(`/boms/${id}/archive`, {}),
+      remove: (id: string) => api.delete<any>(`/boms/${id}`),
+    },
     updates: {
       list: (batchId: string) =>
         api.get<any[]>(`/production-updates?batchId=${encodeURIComponent(batchId)}`),
@@ -838,6 +850,66 @@ const api = {
       cancel: (id: string) => api.post<any>(`/accounting-handoffs/${id}/cancel`, {}),
     },
     tallyPreview: () => api.get<any>("/tally-export-preview"),
+    demand: {
+      outstanding: (productId: string) =>
+        api.get<any>(`/manufacturing-demand/outstanding?productId=${encodeURIComponent(productId)}`),
+      suggestBatches: () => api.get<any[]>("/manufacturing-demand/suggest-batches"),
+      createBatchFromSO: (data: {
+        salesOrderId: string;
+        productId: string;
+        targetQty: number;
+      }) => api.post<any>("/manufacturing-demand/create-batch-from-so", data),
+      createBatchFromApprovedBom: (data: {
+        salesOrderId: string;
+        productId: string;
+        targetQty: number;
+      }) =>
+        api.post<any>("/manufacturing-demand/create-batch-from-approved-bom", data),
+      recalculate: (salesOrderId: string) =>
+        api.post<any>("/manufacturing-demand/recalculate", { salesOrderId }),
+    },
+    readiness: {
+      refresh: (productId: string) =>
+        api.post<any>("/material-readiness/refresh", { productId }),
+      autoTransition: (batchId: string) =>
+        api.post<any>(`/material-readiness/auto-transition/${batchId}`, {}),
+    },
+    po: {
+      outstanding: (productId: string) =>
+        api.get<any[]>(`/manufacturing/po-outstanding?productId=${encodeURIComponent(productId)}`),
+      overdue: () => api.get<any[]>("/manufacturing/po-overdue"),
+    },
+    requirement: {
+      get: (batchId: string) => api.get<any>(`/material-requirement/${encodeURIComponent(batchId)}`),
+    },
+    materialRequirements: {
+      forSalesOrder: (soId: string) =>
+        api.get<any>(`/sales-orders/${encodeURIComponent(soId)}/material-requirements`),
+    },
+    production: {
+      stalled: (thresholdHours?: number) =>
+        api.get<any[]>(`/production/stalled${thresholdHours ? `?thresholdHours=${thresholdHours}` : ""}`),
+      interruptions: () => api.get<any[]>("/production/interruptions"),
+    },
+    inspection: {
+      prefill: (batchId: string) =>
+        api.get<any>(`/quality-inspection/prefill/${encodeURIComponent(batchId)}`),
+    },
+    allocation: {
+      suggestions: () => api.get<any[]>("/allocation/suggestions"),
+    },
+    dispatch: {
+      prefill: (soId: string) => api.get<any>(`/dispatch/prefill/${encodeURIComponent(soId)}`),
+      validate: (soId: string, lines: any[]) => api.post<any>("/dispatch/validate", { soId, lines }),
+      stale: (thresholdHours?: number) =>
+        api.get<any[]>(`/dispatch/stale${thresholdHours ? `?thresholdHours=${thresholdHours}` : ""}`),
+    },
+    invoice: {
+      uninvoiced: () => api.get<any[]>("/invoice/uninvoiced"),
+      prefill: (soId: string) => api.get<any>(`/invoice/prefill/${encodeURIComponent(soId)}`),
+      checkDuplicate: (salesOrderId: string, productId: string, qty: number) =>
+        api.post<any>("/invoice/check-duplicate", { salesOrderId, productId, qty }),
+    },
   },
 
   // E-Way Bill

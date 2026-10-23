@@ -503,3 +503,157 @@ export async function getByNOAToken(token: string) {
   const items = await db.scanByType("Invoice");
   return items.find((i: any) => i.noaToken === token) as Invoice | undefined;
 }
+
+// ---------------------------------------------------------------------------
+// Sales Invoice Automation helpers (Stage 9)
+// ---------------------------------------------------------------------------
+
+export interface UninvoicedDispatch {
+  salesOrderId: string;
+  soNumber: string | null;
+  customerId: string | null;
+  customerName: string | null;
+  productId: string;
+  sku: string | null;
+  productName: string | null;
+  unit: string | null;
+  orderedQty: number;
+  dispatchedQty: number;
+  invoicedQty: number;
+  uninvoicedQty: number;
+  unitPrice: number;
+  gstRate: number | null;
+  expectedDeliveryDate: string | null;
+}
+
+/** Find dispatched quantities that have not yet been invoiced, per SO + product. */
+export async function getUninvoicedDispatches(clientId: string): Promise<UninvoicedDispatch[]> {
+  const GoodsSO = await import("./goods-sales-order.js");
+  const sos = await GoodsSO.list(clientId);
+  const confirmedSOs = (sos as any[]).filter((so) => so.status === "confirmed" || so.status === "partially_dispatched" || so.status === "fully_dispatched");
+
+  // Get all invoices to compute invoiced quantities per SO + product.
+  const invoices = await list(clientId);
+  const invoicedBySoProduct = new Map<string, number>();
+  for (const inv of invoices as any[]) {
+    const soId = inv.salesOrderId || inv.poNumber; // try to link to SO
+    if (!soId) continue;
+    for (const line of inv.lineItems ?? []) {
+      const key = `${soId}#${line.productId}`;
+      const prev = invoicedBySoProduct.get(key) ?? 0;
+      invoicedBySoProduct.set(key, prev + Number(line.quantity || 0));
+    }
+  }
+
+  const result: UninvoicedDispatch[] = [];
+  for (const so of confirmedSOs) {
+    for (const line of so.lines ?? []) {
+      if (!line.productId) continue;
+      const dispatched = Number(line.dispatchedQty ?? 0);
+      if (dispatched <= 0) continue;
+      const key = `${so.id}#${line.productId}`;
+      const invoiced = invoicedBySoProduct.get(key) ?? 0;
+      const uninvoiced = Math.max(0, dispatched - invoiced);
+      if (uninvoiced <= 0) continue;
+      result.push({
+        salesOrderId: so.id,
+        soNumber: so.soNumber ?? null,
+        customerId: so.customerId ?? null,
+        customerName: so.customerName ?? null,
+        productId: line.productId,
+        sku: line.sku ?? null,
+        productName: line.name ?? null,
+        unit: line.unit ?? null,
+        orderedQty: Number(line.orderedQty ?? 0),
+        dispatchedQty: dispatched,
+        invoicedQty: invoiced,
+        uninvoicedQty: uninvoiced,
+        unitPrice: Number(line.unitPrice ?? 0),
+        gstRate: line.gstRate ?? null,
+        expectedDeliveryDate: so.expectedDeliveryDate ?? null,
+      });
+    }
+  }
+
+  result.sort((a, b) => {
+    const da = a.expectedDeliveryDate ? new Date(a.expectedDeliveryDate).getTime() : Infinity;
+    const db = b.expectedDeliveryDate ? new Date(b.expectedDeliveryDate).getTime() : Infinity;
+    return da - db;
+  });
+
+  return result;
+}
+
+/** Check if an invoice already exists for the same SO + product + quantity (duplicate prevention). */
+export async function isDuplicateInvoice(
+  clientId: string,
+  salesOrderId: string,
+  productId: string,
+  qty: number,
+): Promise<boolean> {
+  const invoices = await list(clientId);
+  for (const inv of invoices as any[]) {
+    if (inv.salesOrderId !== salesOrderId) continue;
+    for (const line of inv.lineItems ?? []) {
+      if (line.productId === productId && Number(line.quantity ?? 0) === Number(qty)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** Pre-fill invoice values from a dispatched Sales Order. */
+export interface InvoicePrefill {
+  debtorId: string | null;
+  debtorName: string | null;
+  salesOrderId: string;
+  soNumber: string | null;
+  expectedDeliveryDate: string | null;
+  lines: Array<{
+    productId: string;
+    sku: string | null;
+    productName: string | null;
+    unit: string | null;
+    quantity: number;
+    unitPrice: number;
+    discountPct: number | null;
+    gstRate: number | null;
+    hsnCode: string | null;
+  }>;
+}
+
+export async function prefillInvoiceFromSO(
+  clientId: string,
+  soId: string,
+): Promise<InvoicePrefill> {
+  const GoodsSO = await import("./goods-sales-order.js");
+  const so = await GoodsSO.get(soId);
+  if (!so || so.clientId !== clientId) throw Object.assign(new Error("Sales order not found"), { statusCode: 404 });
+
+  const lines: InvoicePrefill["lines"] = [];
+  for (const line of so.lines ?? []) {
+    const outstanding = Math.max(0, Number(line.orderedQty ?? 0) - Number(line.dispatchedQty ?? 0));
+    if (outstanding <= 0) continue;
+    lines.push({
+      productId: line.productId,
+      sku: line.sku ?? null,
+      productName: line.name ?? null,
+      unit: line.unit ?? null,
+      quantity: outstanding,
+      unitPrice: Number(line.unitPrice ?? 0),
+      discountPct: line.discountPct ?? null,
+      gstRate: line.gstRate ?? null,
+      hsnCode: line.hsnCode ?? null,
+    });
+  }
+
+  return {
+    debtorId: so.customerId ?? null,
+    debtorName: so.customerName ?? null,
+    salesOrderId: so.id,
+    soNumber: so.soNumber ?? null,
+    expectedDeliveryDate: so.expectedDeliveryDate ?? null,
+    lines,
+  };
+}

@@ -122,11 +122,12 @@ function BatchesTab({ filter, onChanged }: { filter?: string; onChanged: () => v
     retry: false,
   });
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(filter && !filter.includes(":") && filter !== "atrisk" ? filter : null);
-  const [search, setSearch] = useState(filter && !filter.includes(":") && filter !== "atrisk" ? filter : "");
+  const [selectedId, setSelectedId] = useState<string | null>(filter && !filter.includes(":") && filter !== "atrisk" && filter !== "overdue" ? filter : null);
+  const [search, setSearch] = useState(filter && !filter.includes(":") && filter !== "atrisk" && filter !== "overdue" ? filter : "");
   const [statusF, setStatusF] = useState(filter && filter.startsWith("status:") ? filter.slice(7) : "");
   const [lineF, setLineF] = useState("");
   const [atRiskOnly, setAtRiskOnly] = useState(filter === "atrisk");
+  const [overdueOnly, setOverdueOnly] = useState(filter === "overdue");
 
   const batches: any[] = Array.isArray(batchesQ.data) ? batchesQ.data : [];
   const lines = useMemo(() => [...new Set(batches.map((b) => b.lineName).filter(Boolean))], [batches]);
@@ -136,6 +137,10 @@ function BatchesTab({ filter, onChanged }: { filter?: string; onChanged: () => v
     if (atRiskOnly) {
       if (["released", "closed", "cancelled", "rejected"].includes(b.status) || !b.deliveryDate) return false;
       if (new Date(b.deliveryDate).getTime() - Date.now() >= 7 * 86400000) return false;
+    }
+    if (overdueOnly) {
+      if (["released", "closed", "cancelled", "rejected", "draft"].includes(b.status) || !b.deliveryDate) return false;
+      if (new Date(b.deliveryDate).getTime() - Date.now() >= 0) return false;
     }
     if (search) {
       const q = search.toLowerCase();
@@ -163,6 +168,10 @@ function BatchesTab({ filter, onChanged }: { filter?: string; onChanged: () => v
         <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
           <input type="checkbox" checked={atRiskOnly} onChange={(e) => setAtRiskOnly(e.target.checked)} className="h-3.5 w-3.5" />
           At risk only
+        </label>
+        <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+          <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} className="h-3.5 w-3.5" />
+          Overdue only
         </label>
         <button onClick={() => setShowCreate((s) => !s)} className={`${BTN_PRIMARY} ml-auto !px-4 !py-2`}>
           <Plus className="mr-1 inline h-4 w-4" /> New batch

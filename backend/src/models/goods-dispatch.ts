@@ -1,5 +1,6 @@
 import { v4 as uuid } from "uuid";
 import * as db from "../dynamodb.js";
+import { writeEvent } from "./domain-event.js";
 
 /**
  * Goods Dispatch Note — the most important stock document on the sales side.
@@ -480,7 +481,7 @@ export async function flipToConfirmed(id: string) {
  * carry stockDebited=true and are left untouched.
  */
 export async function markStockDebited(id: string, debitedBy: string) {
-  return db.updateItemIf(
+  const result = (await db.updateItemIf(
     `GOODS_DISPATCH#${id}`,
     `GOODS_DISPATCH#${id}`,
     {
@@ -492,7 +493,29 @@ export async function markStockDebited(id: string, debitedBy: string) {
     "stockDebited = :false",
     { ":false": false },
     true,
-  ) as Promise<GoodsDispatch | null>;
+  )) as GoodsDispatch | null;
+  // Notify finance that goods have been dispatched and await invoicing.
+  if (result) {
+    try {
+      await writeEvent({
+        clientId: result.clientId,
+        name: "goods_dispatched",
+        docType: "goods_dispatch",
+        docId: result.id,
+        docNumber: result.dispatchNumber,
+        actorId: debitedBy ?? null,
+        payload: {
+          dispatchNumber: result.dispatchNumber,
+          soNumber: result.soNumber,
+          customerName: result.customerName,
+          warehouse: result.warehouse,
+        },
+      });
+    } catch {
+      /* best-effort */
+    }
+  }
+  return result;
 }
 
 /**
@@ -572,4 +595,142 @@ export async function recordReturned(
 
 export async function remove(id: string) {
   return db.deleteItem(`GOODS_DISPATCH#${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Dispatch Automation helpers
+// ---------------------------------------------------------------------------
+
+/** Pre-fill dispatch values from a confirmed Sales Order and its allocations. */
+export interface DispatchPrefill {
+  goodsSalesOrderId: string;
+  soNumber: string | null;
+  customerId: string | null;
+  customerName: string | null;
+  expectedDeliveryDate: string | null;
+  lines: Array<{
+    productId: string;
+    sku: string | null;
+    productName: string | null;
+    unit: string | null;
+    orderedQty: number;
+    dispatchedQty: number;
+    outstandingQty: number;
+    suggestedDispatchQty: number;
+  }>;
+}
+
+export async function prefillDispatch(
+  clientId: string,
+  soId: string,
+): Promise<DispatchPrefill> {
+  const GoodsSO = await import("./goods-sales-order.js");
+  const so = await GoodsSO.get(soId);
+  if (!so || so.clientId !== clientId) throw Object.assign(new Error("Sales order not found"), { statusCode: 404 });
+
+  const lines: DispatchPrefill["lines"] = [];
+  for (const line of so.lines ?? []) {
+    const outstanding = Math.max(0, Number(line.orderedQty ?? 0) - Number(line.dispatchedQty ?? 0));
+    lines.push({
+      productId: line.productId,
+      sku: line.sku ?? null,
+      productName: line.name ?? null,
+      unit: line.unit ?? null,
+      orderedQty: Number(line.orderedQty ?? 0),
+      dispatchedQty: Number(line.dispatchedQty ?? 0),
+      outstandingQty: outstanding,
+      suggestedDispatchQty: outstanding,
+    });
+  }
+
+  return {
+    goodsSalesOrderId: so.id,
+    soNumber: so.soNumber ?? null,
+    customerId: so.customerId ?? null,
+    customerName: so.customerName ?? null,
+    expectedDeliveryDate: so.expectedDeliveryDate ?? null,
+    lines,
+  };
+}
+
+/** Validate dispatch quantities against allocated and outstanding SO quantities. */
+export interface DispatchValidation {
+  ok: boolean;
+  errors: Array<{ productId: string; productName: string | null; message: string }>;
+}
+
+export async function validateDispatchQuantities(
+  clientId: string,
+  soId: string,
+  lines: Array<{ productId: string; qty: number }>,
+): Promise<DispatchValidation> {
+  const GoodsSO = await import("./goods-sales-order.js");
+  const so = await GoodsSO.get(soId);
+  if (!so || so.clientId !== clientId) throw Object.assign(new Error("Sales order not found"), { statusCode: 404 });
+
+  const errors: DispatchValidation["errors"] = [];
+
+  for (const line of lines) {
+    const soLine = (so.lines ?? []).find((l: any) => l.productId === line.productId);
+    if (!soLine) {
+      errors.push({ productId: line.productId, productName: null, message: "Product not on this Sales Order" });
+      continue;
+    }
+    const outstanding = Math.max(0, Number(soLine.orderedQty ?? 0) - Number(soLine.dispatchedQty ?? 0));
+    if (Number(line.qty) > outstanding) {
+      errors.push({
+        productId: line.productId,
+        productName: soLine.name ?? null,
+        message: `Dispatch qty ${line.qty} exceeds outstanding ${outstanding}`,
+      });
+    }
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+/** Find dispatches that have been in a pipeline stage beyond the threshold. */
+export interface StaleDispatch {
+  dispatchId: string;
+  dispatchNumber: string | null;
+  soNumber: string | null;
+  customerName: string | null;
+  status: string;
+  stage: string | null;
+  updatedAt: string | null;
+  hoursInStage: number;
+  expectedDeliveryDate: string | null;
+}
+
+export async function getStaleDispatches(
+  clientId: string,
+  thresholdHours: number = 24,
+): Promise<StaleDispatch[]> {
+  const dispatches = await list(clientId);
+  const now = Date.now();
+  const thresholdMs = thresholdHours * 3600 * 1000;
+  const stale: StaleDispatch[] = [];
+
+  for (const d of dispatches as any[]) {
+    // Only flag dispatches that are confirmed but not yet fully delivered/returned.
+    if (["cancelled", "returned", "delivered"].includes(d.status)) continue;
+    const updatedAt = d.updatedAt || d.createdAt;
+    const hoursInStage = (now - new Date(updatedAt).getTime()) / (1000 * 3600);
+    if (hoursInStage > thresholdHours) {
+      stale.push({
+        dispatchId: d.id,
+        dispatchNumber: d.dispatchNumber ?? null,
+        soNumber: d.soNumber ?? null,
+        customerName: d.customerName ?? null,
+        status: d.status,
+        stage: d.status,
+        updatedAt,
+        hoursInStage: Math.round(hoursInStage * 10) / 10,
+        expectedDeliveryDate: d.deliveryDate ?? null,
+      });
+    }
+  }
+
+  stale.sort((a, b) => b.hoursInStage - a.hoursInStage);
+  return stale;
 }

@@ -127,6 +127,8 @@ import * as POClause from "../models/po-clause.js";
 import * as GoodsReceipt from "../models/goods-receipt.js";
 import * as GoodsSO from "../models/goods-sales-order.js";
 import * as GoodsDispatch from "../models/goods-dispatch.js";
+import * as Mfg from "../models/manufacturing.js";
+import * as Bom from "../models/bom.js";
 import * as Expense from "../models/expense.js";
 import * as Advance from "../models/advance.js";
 import * as Alert from "../models/alert.js";
@@ -5232,6 +5234,14 @@ router.post("/goods-receipts/:id/confirm", authMiddleware, async (req, res) => {
     );
     if (!flipped) return res.json({ ...receipt, alreadyConfirmed: true });
     await creditGoodsReceipt(clientId, { ...flipped, receivingLocationId: receivingLocation.id }, po);
+    // Automation: refresh material readiness for batches using received products.
+    try {
+      for (const line of receipt.lines ?? []) {
+        if (line.productId) await Mfg.refreshReadinessOnStockChange(clientId, line.productId);
+      }
+    } catch {
+      /* best-effort */
+    }
     trackAction(req, "grn.confirmed", receipt.id, {
       entityType: "grn",
       entityRef: receipt.receiptNumber,
@@ -6059,6 +6069,24 @@ router.post(
         docType: "sales_order",
         appPath: "/app/sales-orders",
       });
+      // Automation: recalculate manufacturing demand after SO confirmation.
+      try {
+        await Mfg.recalculateDemandOnSOChange(so.clientId, so.id);
+      } catch {
+        /* best-effort; demand recalc failure must not block SO confirmation */
+      }
+      // Automation: auto-calculate material requirements from the approved BOM
+      // when the SO is confirmed. Stamp the calculation time so the frontend
+      // can surface whether requirements are current. Best-effort — a missing
+      // BOM must not block SO confirmation.
+      try {
+        await Bom.calculateSoMaterialRequirements(so.clientId, so.id);
+        await GoodsSO.update(so.id, {
+          materialRequirementsCalculatedAt: db.nowISO(),
+        });
+      } catch {
+        /* best-effort; material-requirement calc failure must not block SO confirmation */
+      }
       res.json(updated);
     } catch (err: any) {
       res.status(500).json({ error: err.message });

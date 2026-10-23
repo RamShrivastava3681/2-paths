@@ -982,7 +982,207 @@ function ProductDetailDrawer({
             </div>
           </div>
         </div>
+
+        {/* Bill of Materials */}
+        <section className="rounded-xl border border-border bg-muted/30 p-4">
+          <BomManager product={product} canWrite={canWrite} />
+        </section>
+
       </div>
+    </div>
+  );
+}
+
+function BomManager({
+  product,
+  canWrite,
+}: {
+  product: Product;
+  canWrite: boolean;
+}) {
+  const qc = useQueryClient();
+  const bomsQ = useQuery({
+    queryKey: ["boms", "product", product.id],
+    queryFn: () => api.manufacturing.boms.getByProduct(product.id),
+    retry: false,
+    enabled: !!product.id,
+  });
+  const [editing, setEditing] = useState<boolean | null>(null);
+  const [lines, setLines] = useState<any[]>([]);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const approved = bomsQ.data?.find((b: any) => b.status === "approved");
+  const draft = bomsQ.data?.find((b: any) => b.status === "draft");
+  const activeBom = approved ?? draft;
+
+  const UNITS = [...new Set([
+    product.unit_of_measure || "piece",
+    "piece", "pair", "carton", "box", "dozen", "set", "kg", "g", "litre", "ml", "metre", "bottle", "pack",
+  ])];
+  const CATEGORIES = ["fabric", "trim", "packaging", "other"] as const;
+
+  useEffect(() => {
+    if (activeBom?.lines && !editing) {
+      setLines((activeBom.lines as any[]).map((l: any) => ({
+        productId: l.productId,
+        productName: l.productName ?? "",
+        sku: l.sku ?? null,
+        qtyPerUnit: String(l.qtyPerUnit ?? ""),
+        unitOfMeasure: l.unitOfMeasure || "piece",
+        wastagePct: String(l.wastagePct ?? 0),
+        size: l.size ?? "",
+        color: l.color ?? "",
+        category: l.category ?? "other",
+      })));
+    }
+  }, [activeBom, editing]);
+
+  const addLine = () => {
+    setLines([...lines, {
+      productId: "", productName: "", sku: null, qtyPerUnit: "1", unitOfMeasure: "piece",
+      wastagePct: "0", size: "", color: "", category: "other",
+    }]);
+  };
+
+  const save = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const payloadLines = lines.map((l) => ({
+        productId: l.productId,
+        productName: l.productName || null,
+        sku: l.sku || null,
+        qtyPerUnit: Number(l.qtyPerUnit),
+        unitOfMeasure: l.unitOfMeasure,
+        wastagePct: Number(l.wastagePct),
+        size: l.size || null,
+        color: l.color || null,
+        category: l.category,
+      }));
+      if (activeBom) {
+        await api.manufacturing.boms.update(activeBom.id, { lines: payloadLines });
+      } else {
+        await api.manufacturing.boms.create({
+          productId: product.id,
+          productName: product.name,
+          lines: payloadLines,
+        });
+      }
+      setEditing(null);
+      qc.invalidateQueries({ queryKey: ["boms", "product", product.id] });
+      setMsg("BOM saved.");
+    } catch (e: any) { setMsg(e.message || "Save failed"); } finally { setBusy(false); }
+  };
+
+  const approve = async () => {
+    if (!activeBom) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.manufacturing.boms.approve(activeBom.id);
+      qc.invalidateQueries({ queryKey: ["boms", "product", product.id] });
+      setMsg("BOM approved.");
+    } catch (e: any) { setMsg(e.message || "Approve failed"); } finally { setBusy(false); }
+  };
+
+  if (bomsQ.isLoading) return <p className="text-xs text-muted-foreground">Loading BOM…</p>;
+  if (bomsQ.isError) return <p className="text-xs text-red-600">Could not load BOM.</p>;
+
+  const linesUi = activeBom ? (activeBom.lines as any[]).map((l: any) => ({
+    productId: l.productId,
+    productName: l.productName ?? "",
+    sku: l.sku ?? null,
+    qtyPerUnit: String(l.qtyPerUnit ?? ""),
+    unitOfMeasure: l.unitOfMeasure || "piece",
+    wastagePct: String(l.wastagePct ?? 0),
+    size: l.size ?? "",
+    color: l.color ?? "",
+    category: l.category ?? "other",
+  })) : lines;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Bill of Materials — {product.sku}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Raw materials required per finished {product.unit_of_measure || "unit"}
+          </p>
+        </div>
+        {activeBom && (
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+            activeBom.status === "approved"
+              ? "border-emerald/30 bg-emerald/10 text-emerald-700"
+              : "border-amber/30 bg-amber/10 text-amber-700"
+          }`}>
+            {activeBom.status === "approved" ? "Approved" : "Draft"} · v{activeBom.version}
+          </span>
+        )}
+      </div>
+
+      {!activeBom && canWrite && (
+        <div className="rounded-lg border border-dashed border-border p-3 text-xs text-center text-muted-foreground">
+          No BOM yet. Add material lines below and save.
+        </div>
+      )}
+
+      <div className="grid gap-1.5 md:grid-cols-12">
+        {linesUi.map((l, i) => (
+          <div key={i} className="flex flex-col gap-1">
+            <input
+              value={l.productName || l.productId}
+              onChange={(e) => setLines(linesUi.map((x, j) => j === i ? { ...x, productName: e.target.value } : linesUi))}
+              placeholder="Raw material"
+              className="w-full rounded-md border border-border px-2 py-1.5 font-normal text-sm"
+            />
+            <input type="number" value={l.qtyPerUnit} onChange={(e) => setLines(linesUi.map((x, j) => j === i ? { ...x, qtyPerUnit: e.target.value } : linesUi))}
+              placeholder="Qty/unit" className="w-full rounded-md border border-border px-2 py-1.5 font-normal text-sm" />
+            <select value={l.unitOfMeasure} onChange={(e) => setLines(linesUi.map((x, j) => j === i ? { ...x, unitOfMeasure: e.target.value } : linesUi))}
+              className="w-full rounded-md border border-border px-2 py-1.5 font-normal text-sm">
+              {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+            <input type="number" value={l.wastagePct} onChange={(e) => setLines(linesUi.map((x, j) => j === i ? { ...x, wastagePct: e.target.value } : linesUi))}
+              placeholder="Wastage %" className="w-full rounded-md border border-border px-2 py-1.5 font-normal text-sm" />
+            <input value={l.size} onChange={(e) => setLines(linesUi.map((x, j) => j === i ? { ...x, size: e.target.value } : linesUi))}
+              placeholder="Size (any)" className="w-full rounded-md border border-border px-2 py-1.5 font-normal text-sm" />
+            <input value={l.color} onChange={(e) => setLines(linesUi.map((x, j) => j === i ? { ...x, color: e.target.value } : linesUi))}
+              placeholder="Colour (any)" className="w-full rounded-md border border-border px-2 py-1.5 font-normal text-sm" />
+            <select value={l.category} onChange={(e) => setLines(linesUi.map((x, j) => j === i ? { ...x, category: e.target.value } : linesUi))}
+              className="w-full rounded-md border border-border px-2 py-1.5 font-normal text-sm">
+              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {canWrite && (
+              <button onClick={() => setLines(linesUi.filter((_, j) => j !== i))} className="text-[10px] text-red-600 hover:underline">Remove</button>
+            )}
+          </div>
+        ))}
+        {canWrite && (
+          <button onClick={addLine} className="col-span-12 text-xs text-primary hover:underline">+ Add material line</button>
+        )}
+      </div>
+
+      {activeBom && canWrite && (
+        <div className="flex gap-2">
+          <button onClick={() => setEditing((s) => s === null ? true : null)} disabled={busy} className="text-xs text-primary hover:underline">
+            {editing === null ? "Edit BOM" : "Cancel edit"}
+          </button>
+          {editing !== null && (
+            <>
+              <button onClick={save} disabled={busy} className="text-xs font-semibold bg-primary text-primary-foreground px-3 py-1.5 rounded hover:bg-primary/90 disabled:opacity-60">Save</button>
+              {busy && <span className="text-xs text-muted-foreground">Saving…</span>}
+            </>
+          )}
+        </div>
+      )}
+
+      {activeBom && activeBom.status === "draft" && canWrite && (
+        <button onClick={approve} disabled={busy} className="text-xs font-semibold bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-700 disabled:opacity-60">
+          {busy ? "Approving…" : "Approve BOM"}
+        </button>
+      )}
+
+      {msg && <p className="text-xs text-muted-foreground">{msg}</p>}
     </div>
   );
 }

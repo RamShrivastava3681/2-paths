@@ -194,6 +194,8 @@ export interface GoodsSalesOrder {
   currentOwnerRole: string | null;
   nextRequiredAction: string | null;
   nextDueDate: string | null;
+  /** When material requirements were last auto-calculated from the approved BOM. */
+  materialRequirementsCalculatedAt: string | null;
   lines: GoodsSalesOrderLine[];
   totalQty: number;
   subtotal: number;
@@ -485,6 +487,7 @@ export async function create(
     documents: data.documents || [],
     status,
     manualStatus: status as GoodsSalesOrder["manualStatus"],
+    materialRequirementsCalculatedAt: null,
     reviewedBy: data.reviewedBy || null,
     reviewedAt: data.reviewedAt || null,
     salesReviewedBy: data.salesReviewedBy || null,
@@ -575,6 +578,7 @@ export async function update(id: string, updates: Partial<GoodsSalesOrder>) {
     "currentOwnerRole",
     "nextRequiredAction",
     "nextDueDate",
+    "materialRequirementsCalculatedAt",
   ];
   for (const k of allowed) {
     if ((updates as any)[k] !== undefined) patch[k] = (updates as any)[k];

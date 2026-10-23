@@ -1,5 +1,9 @@
 import { v4 as uuid } from "uuid";
 import * as db from "../dynamodb.js";
+import * as Product from "./product.js";
+import * as GoodsSO from "./goods-sales-order.js";
+import type { BillOfMaterial } from "./bom.js";
+import { writeEvent } from "./domain-event.js";
 
 /**
  * Reusable manufacturing modules (NOT customer-specific).
@@ -170,6 +174,14 @@ export interface BOMLine {
   productName?: string | null;
   /** material units consumed per finished unit */
   qtyPerUnit: number;
+  /** Unit of measure (piece, metre, carton, …). Defaults to "piece". */
+  unitOfMeasure?: string;
+  /** Wastage percentage (0–100) applied to this line only. Defaults to 0. */
+  wastagePct?: number;
+  /** Optional size this line applies to. Null = applies to all sizes of the style. */
+  size?: string | null;
+  /** Optional colour this line applies to. Null = applies to all colours of the style. */
+  color?: string | null;
   /** FB/TRIM/PACK category for the material-check stage */
   category?: "fabric" | "trim" | "packaging" | "other";
 }
@@ -205,7 +217,13 @@ export interface ManufacturingBatch {
   actualEndAt?: string | null;
   /** bill of materials + evaluated readiness (Stages B–C) */
   bom: BOMLine[];
+  /** Approved BOM version used to build this batch — frozen at creation. */
+  bomVersion: number | null;
+  /** When the source BOM was approved — frozen at creation. */
+  bomApprovedAt: string | null;
   materialStatus: MaterialStatus;
+  /** Timestamp when materialStatus was last computed — used to detect stale readiness. */
+  readinessComputedAt: string | null;
   status: BatchStatus;
   /** lifecycle audit: every status move, who + when */
   statusHistory: Array<{ from: BatchStatus; to: BatchStatus; by: string | null; at: string; notes?: string | null }>;
@@ -260,6 +278,8 @@ export async function createBatch(
     plannedStartAt?: string | null;
     plannedEndAt?: string | null;
     bom?: BOMLine[];
+    bomVersion?: number | null;
+    bomApprovedAt?: string | null;
   }
 ): Promise<ManufacturingBatch> {
   const qty = Number(data.targetQty);
@@ -293,7 +313,10 @@ export async function createBatch(
     actualStartAt: null,
     actualEndAt: null,
     bom,
+    bomVersion: data.bomVersion ?? null,
+    bomApprovedAt: data.bomApprovedAt ?? null,
     materialStatus: bom.length === 0 ? "awaiting_inspection" : "blocked",
+    readinessComputedAt: null,
     status: "planned",
     statusHistory: [],
     qualityStatus: "Pending",
@@ -318,11 +341,19 @@ function validateBom(lines: BOMLine[]): BOMLine[] {
     const q = Number((l as any).qtyPerUnit);
     if (!l.productId) throw new Error("BOM line productId is required");
     if (!Number.isFinite(q) || q <= 0) throw new Error("BOM qtyPerUnit must be > 0");
+    const wastage = Number((l as any).wastagePct ?? 0);
+    if (!Number.isFinite(wastage) || wastage < 0 || wastage > 100) {
+      throw new Error("BOM wastagePct must be 0–100");
+    }
     return {
       productId: l.productId,
       sku: (l as any).sku ?? null,
       productName: (l as any).productName ?? null,
       qtyPerUnit: q,
+      unitOfMeasure: (l as any).unitOfMeasure ?? "piece",
+      wastagePct: wastage,
+      size: (l as any).size ?? null,
+      color: (l as any).color ?? null,
       category: (l as any).category ?? "other",
     };
   });
@@ -423,6 +454,26 @@ export async function transitionBatch(
       { from: b.status, to: "completed" as BatchStatus, by: actor, at: now, notes: notes ?? null },
       { from: "completed" as BatchStatus, to: "quality_review" as BatchStatus, by: actor, at: now, notes: "Auto: completion initiates quality review" },
     ];
+    // Notify quality inspector that a batch awaits review.
+    try {
+      await writeEvent({
+        clientId: b.clientId,
+        name: "quality_inspection_required",
+        docType: "manufacturing_batch",
+        docId: b.id,
+        docNumber: b.batchNumber,
+        actorId: actor ?? null,
+        payload: {
+          batchNumber: b.batchNumber,
+          productName: b.productName,
+          producedGoodQty: b.producedGoodQty,
+          targetQty: b.targetQty,
+          deliveryDate: b.deliveryDate,
+        },
+      });
+    } catch {
+      /* best-effort */
+    }
   }
   await db.updateItem(b.pk, b.sk, patch);
   return getBatch(id);
@@ -626,6 +677,8 @@ export async function listMaterialIssues(
  * Issue raw material to a batch. Writes a confirmed `out` stock movement so
  * raw stock drops immediately, and records the issue row for traceability.
  * Idempotent per (clientId, idempotencyKey). Over-issue → 409.
+ * Uses optimistic concurrency on Product.stockVersion to prevent two
+ * simultaneous issues from consuming the same available quantity.
  */
 export async function issueMaterial(data: {
   clientId: string;
@@ -654,6 +707,10 @@ export async function issueMaterial(data: {
   if (batch.status === "closed" || batch.status === "completed")
     throw Object.assign(new Error("Batch is completed — no further material issues"), { statusCode: 409 });
 
+  const product = await Product.get(data.productId);
+  if (!product) throw Object.assign(new Error("Product not found"), { statusCode: 404 });
+  const expectedVersion = Number(product.stockVersion || 0);
+
   // Available raw stock = Σ confirmed movements for this product.
   const { list: listMovements, getBalance, create: createMovement } = await import(
     "./stock-movement.js"
@@ -664,6 +721,25 @@ export async function issueMaterial(data: {
     throw Object.assign(
       new Error(`Insufficient stock — ${balance} available, ${qty} requested`),
       { statusCode: 409, code: "INSUFFICIENT_STOCK" }
+    );
+  }
+
+  // Optimistic concurrency: claim the stock version before posting the
+  // movement. If another request already incremented it, abort and let the
+  // caller retry.
+  const claimed = await db.updateItemIf(
+    `PRODUCT#${data.productId}`,
+    `PRODUCT#${data.productId}`,
+    { stockVersion: expectedVersion + 1 },
+    "#sv = :ev",
+    { ":ev": expectedVersion },
+    true,
+    { "#sv": "stockVersion" },
+  );
+  if (!claimed) {
+    throw Object.assign(
+      new Error("Stock was modified by another request — please retry"),
+      { statusCode: 409, code: "STOCK_VERSION_CONFLICT" }
     );
   }
 
@@ -706,6 +782,18 @@ export async function issueMaterial(data: {
     createdAt: now,
   };
   await db.putItem(item);
+  // Automation: refresh readiness for batches using this product after stock is consumed.
+  try {
+    await refreshReadinessOnStockChange(data.clientId, data.productId);
+  } catch {
+    /* best-effort; readiness refresh failure must not block material issue */
+  }
+  // Automation: auto-release any reservation for this batch/product covered by the issue.
+  try {
+    await autoReleaseReservationOnIssue(data.clientId, data.batchId, data.productId, qty);
+  } catch {
+    /* best-effort; reservation release failure must not block material issue */
+  }
   return { issue: item, duplicate: false };
 }
 
@@ -1073,6 +1161,11 @@ export async function reserveMaterial(data: {
   const qty = Number(data.qty);
   if (!data.productId) throw new Error("productId is required");
   if (!Number.isFinite(qty) || qty <= 0) throw new Error("qty must be > 0");
+
+  const product = await Product.get(data.productId);
+  if (!product) throw Object.assign(new Error("Product not found"), { statusCode: 404 });
+  const expectedVersion = Number(product.stockVersion || 0);
+
   const { list: listMovements, getBalance } = await import("./stock-movement.js");
   const movements = await listMovements(data.clientId);
   const balance = await getBalance(data.productId, movements);
@@ -1084,6 +1177,26 @@ export async function reserveMaterial(data: {
       { statusCode: 409, code: "OVER_RESERVATION" }
     );
   }
+
+  // Optimistic concurrency: claim the stock version before creating the
+  // reservation. If another request already incremented it, abort and let the
+  // caller retry.
+  const claimed = await db.updateItemIf(
+    `PRODUCT#${data.productId}`,
+    `PRODUCT#${data.productId}`,
+    { stockVersion: expectedVersion + 1 },
+    "#sv = :ev",
+    { ":ev": expectedVersion },
+    true,
+    { "#sv": "stockVersion" },
+  );
+  if (!claimed) {
+    throw Object.assign(
+      new Error("Stock was modified by another request — please retry"),
+      { statusCode: 409, code: "STOCK_VERSION_CONFLICT" }
+    );
+  }
+
   const id = uuid();
   const now = db.nowISO();
   const item: MaterialReservation = {
@@ -1105,6 +1218,12 @@ export async function reserveMaterial(data: {
     updatedAt: now,
   };
   await db.putItem(item);
+  // Automation: refresh readiness for batches using this product after reservation changes.
+  try {
+    await refreshReadinessOnStockChange(data.clientId, data.productId);
+  } catch {
+    /* best-effort */
+  }
   return item;
 }
 
@@ -1116,6 +1235,12 @@ export async function releaseReservation(id: string, clientId: string, consumed 
     status: consumed ? "consumed" : "released",
     updatedAt: db.nowISO(),
   });
+  // Automation: refresh readiness for batches using this product after reservation changes.
+  try {
+    await refreshReadinessOnStockChange(clientId, item.productId);
+  } catch {
+    /* best-effort */
+  }
   return (await db.getItem(item.pk)) as MaterialReservation | null;
 }
 
@@ -1167,7 +1292,9 @@ export async function computeReadiness(clientId: string, batchId: string): Promi
   }
   const lines: ReadinessLine[] = [];
   for (const bom of b.bom ?? []) {
-    const required = Number(bom.qtyPerUnit || 0) * Number(b.targetQty || 0);
+    const baseQty = Number(bom.qtyPerUnit || 0) * Number(b.targetQty || 0);
+    const wastageQty = baseQty * (Number(bom.wastagePct || 0) / 100);
+    const required = baseQty + wastageQty;
     const available = await getBalance(bom.productId, movements);
     const reserved = await reservedForProduct(clientId, bom.productId, b.id);
     const incoming = poLines.filter((p) => p.productId === bom.productId).reduce((s, p) => s + p.outstanding, 0);
@@ -1193,9 +1320,455 @@ export async function computeReadiness(clientId: string, batchId: string): Promi
           ? "partial"
           : "blocked";
   if (materialStatus !== b.materialStatus) {
-    await db.updateItem(b.pk, b.sk, { materialStatus, updatedAt: db.nowISO() });
+    // Do not persist here — the caller (refreshReadinessOnStockChange) handles
+    // persistence with upgrade-only logic to avoid downgrades caused by
+    // eventually-consistent reads.
   }
   return { batchId: b.id, batchNumber: b.batchNumber, materialStatus, lines, totalShortage };
+}
+
+// ---------------------------------------------------------------------------
+// Material Readiness Automation (Stage 2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if a batch's readiness result is stale — computed before a relevant
+ * stock change (GRN confirm, material issue, reservation change).
+ */
+export function isReadinessStale(batch: ManufacturingBatch, stockChangedAt: string): boolean {
+  if (!batch.readinessComputedAt) return true;
+  return new Date(batch.readinessComputedAt).getTime() < new Date(stockChangedAt).getTime();
+}
+
+/**
+ * Refresh material readiness for all non-terminal batches that use a given
+ * product. Called after GRN confirm, material issue, or reservation release.
+ * Returns the list of batch IDs whose readiness changed.
+ */
+export async function refreshReadinessOnStockChange(clientId: string, productId: string): Promise<string[]> {
+  const batches = await listBatches(clientId);
+  const affected: string[] = [];
+
+  for (const b of batches) {
+    if (["closed", "cancelled", "rejected"].includes(b.status)) continue;
+    const usesProduct = (b.bom ?? []).some((l) => l.productId === productId);
+    if (!usesProduct) continue;
+
+    const before = b.materialStatus;
+    const readiness = await computeReadiness(clientId, b.id);
+
+    // Only upgrade readiness; never downgrade. A batch that already has
+    // materials issued should not lose its "ready" status just because
+    // on-hand stock dropped (materials are now in WIP for this batch).
+    const rank = { blocked: 0, partial: 1, ready: 2, awaiting_inspection: 1 };
+    const newRank = rank[readiness.materialStatus] ?? 0;
+    const beforeRank = rank[before] ?? 0;
+    const adjustedStatus = newRank > beforeRank ? readiness.materialStatus : before;
+
+    if (adjustedStatus !== before) {
+      await db.updateItem(b.pk, b.sk, { materialStatus: adjustedStatus, readinessComputedAt: db.nowISO(), updatedAt: db.nowISO() });
+      affected.push(b.id);
+    }
+  }
+
+  return affected;
+}
+
+// ---------------------------------------------------------------------------
+// Material Requirement Automation (Stage 4)
+// ---------------------------------------------------------------------------
+
+/** Outstanding material requirement for a batch: BOM qty × target − confirmed issues. */
+export interface MaterialRequirementLine {
+  productId: string;
+  sku: string | null;
+  productName: string | null;
+  category: string;
+  requiredQty: number;
+  issuedQty: number;
+  outstandingQty: number;
+}
+
+export async function getOutstandingMaterialRequirement(
+  batchId: string,
+): Promise<{ batchId: string; batchNumber: string; targetQty: number; lines: MaterialRequirementLine[]; totalOutstanding: number }> {
+  const b = await getBatch(batchId);
+  if (!b) throw Object.assign(new Error("Batch not found"), { statusCode: 404 });
+
+  const issues = await listMaterialIssues(b.clientId, b.id);
+  const issuedByProduct = new Map<string, number>();
+  for (const issue of issues) {
+    const prev = issuedByProduct.get(issue.productId) ?? 0;
+    issuedByProduct.set(issue.productId, prev + Number(issue.qty || 0));
+  }
+
+  const lines: MaterialRequirementLine[] = [];
+  let totalOutstanding = 0;
+
+  for (const bomLine of b.bom ?? []) {
+    const baseQty = Number(bomLine.qtyPerUnit || 0) * Number(b.targetQty || 0);
+    const wastageQty = baseQty * (Number(bomLine.wastagePct || 0) / 100);
+    const required = baseQty + wastageQty;
+    const issued = Number(issuedByProduct.get(bomLine.productId) || 0);
+    const outstanding = Math.max(0, required - issued);
+    totalOutstanding += outstanding;
+    lines.push({
+      productId: bomLine.productId,
+      sku: bomLine.sku ?? null,
+      productName: bomLine.productName ?? null,
+      category: bomLine.category ?? "other",
+      requiredQty: required,
+      issuedQty: issued,
+      outstandingQty: outstanding,
+    });
+  }
+
+  return {
+    batchId: b.id,
+    batchNumber: b.batchNumber,
+    targetQty: Number(b.targetQty || 0),
+    lines,
+    totalOutstanding,
+  };
+}
+
+/**
+ * When material is issued to a batch, auto-release any corresponding
+ * reservation (reduce its qty or mark consumed if fully covered).
+ */
+export async function autoReleaseReservationOnIssue(
+  clientId: string,
+  batchId: string,
+  productId: string,
+  issuedQty: number,
+): Promise<void> {
+  const reservations = await listReservations(clientId, batchId);
+  let remaining = issuedQty;
+
+  for (const res of reservations) {
+    if (res.productId !== productId || res.status !== "active") continue;
+    if (remaining <= 0) break;
+    const consumeQty = Math.min(remaining, Number(res.qty || 0));
+    remaining -= consumeQty;
+    if (consumeQty >= Number(res.qty || 0)) {
+      await db.updateItem(res.pk, res.sk, { status: "consumed", updatedAt: db.nowISO() });
+    } else {
+      await db.updateItem(res.pk, res.sk, { qty: Number(res.qty || 0) - consumeQty, updatedAt: db.nowISO() });
+    }
+  }
+}
+
+/**
+ * Auto-transition a single batch to ready_to_start when its readiness is
+ * "ready" and existing transition rules permit. Returns the updated batch or null.
+ */
+export async function autoTransitionToReadyToStart(
+  batchId: string,
+  clientId: string,
+): Promise<ManufacturingBatch | null> {
+  const b = await getBatch(batchId);
+  if (!b || b.clientId !== clientId) return null;
+  if (!["planned", "ready_to_start"].includes(b.status)) return null;
+
+  const readiness = await computeReadiness(clientId, batchId);
+  if (readiness.materialStatus !== "ready") return null;
+
+  return transitionBatch(batchId, clientId, "ready_to_start", null, "Materials ready — auto-transitioned");
+}
+
+// ---------------------------------------------------------------------------
+// Sales Order → Manufacturing Demand Automation (Stage 2)
+
+export interface OutstandingDemand {
+  productId: string;
+  sku: string | null;
+  productName: string | null;
+  totalConfirmedQty: number;
+  totalDispatchedQty: number;
+  totalAllocatedQty: number;
+  outstandingQty: number;
+  sourceOrders: Array<{
+    salesOrderId: string;
+    soNumber: string | null;
+    productId: string;
+    orderedQty: number;
+    dispatchedQty: number;
+    expectedDeliveryDate: string | null;
+    priority: string | null;
+  }>;
+}
+
+/**
+ * Calculate net manufacturing demand for a product from confirmed Sales Orders.
+ * Net = confirmed qty − dispatched qty − allocated qty (released stock allocated to batches).
+ * Does not double-count: dispatched qty comes from dispatch notes, allocated qty from batch allocations.
+ */
+export async function getOutstandingDemand(clientId: string, productId: string): Promise<OutstandingDemand> {
+  const product = await Product.get(productId);
+  if (!product) throw Object.assign(new Error("Product not found"), { statusCode: 404 });
+
+  // Fetch all confirmed SOs for this client that reference this product.
+  const { items } = await db.queryByGSI1(clientId, {
+    entityType: "GoodsSalesOrder",
+    limit: 500,
+  });
+  const sos = (items as any[]).filter(
+    (so) => so.status === "confirmed" && Array.isArray(so.lines) && so.lines.some((l: any) => l.productId === productId),
+  );
+
+  const sourceOrders: OutstandingDemand["sourceOrders"] = [];
+  let totalConfirmed = 0;
+  let totalDispatched = 0;
+  let totalAllocated = 0;
+
+  for (const so of sos) {
+    for (const line of so.lines as any[]) {
+      if (line.productId !== productId) continue;
+      const ordered = Number(line.orderedQty ?? 0);
+      const dispatched = Number(line.dispatchedQty ?? 0);
+      totalConfirmed += ordered;
+      totalDispatched += dispatched;
+      sourceOrders.push({
+        salesOrderId: so.id,
+        soNumber: so.soNumber ?? null,
+        productId: line.productId,
+        orderedQty: ordered,
+        dispatchedQty: dispatched,
+        expectedDeliveryDate: so.expectedDeliveryDate ?? null,
+        priority: null,
+      });
+    }
+  }
+
+  // Allocated qty: sum of batch allocations for released batches linked to these SOs.
+  const batches = await listBatches(clientId);
+  const allocatedBySo = new Map<string, number>();
+  for (const b of batches) {
+    if (!b.salesOrderId) continue;
+    if (!allocatedBySo.has(b.salesOrderId)) allocatedBySo.set(b.salesOrderId, 0);
+    allocatedBySo.set(b.salesOrderId, Number(allocatedBySo.get(b.salesOrderId)) + Number(b.allocatedQty ?? 0));
+  }
+
+  for (const o of sourceOrders) {
+    const allocated = Number(allocatedBySo.get(o.salesOrderId) ?? 0);
+    totalAllocated += allocated;
+  }
+
+  const outstanding = Math.max(0, totalConfirmed - totalDispatched - totalAllocated);
+
+  return {
+    productId,
+    sku: product.sku ?? null,
+    productName: product.name ?? null,
+    totalConfirmedQty: totalConfirmed,
+    totalDispatchedQty: totalDispatched,
+    totalAllocatedQty: totalAllocated,
+    outstandingQty: outstanding,
+    sourceOrders,
+  };
+}
+
+/**
+ * Find an existing non-terminal batch for a given SO + product, to prevent
+ * duplicate batch creation for the same outstanding requirement.
+ * Terminal statuses: closed, cancelled, rejected.
+ */
+export async function findExistingBatchForDemand(
+  clientId: string,
+  salesOrderId: string,
+  productId: string,
+): Promise<ManufacturingBatch | null> {
+  const batches = await listBatches(clientId);
+  return (
+    batches.find(
+      (b) =>
+        b.salesOrderId === salesOrderId &&
+        b.productId === productId &&
+        !["closed", "cancelled", "rejected"].includes(b.status),
+    ) ?? null
+  );
+}
+
+/**
+ * Create a ManufacturingBatch pre-filled from a confirmed Sales Order.
+ * Links the batch to the SO and carries over product, qty, delivery date, priority.
+ */
+export async function createBatchFromSO(data: {
+  clientId: string;
+  salesOrderId: string;
+  salesOrderNumber: string | null;
+  productId: string;
+  sku: string | null;
+  productName: string | null;
+  targetQty: number;
+  deliveryDate?: string | null;
+  priority?: "low" | "normal" | "high" | "urgent" | null;
+  createdBy?: string | null;
+}): Promise<ManufacturingBatch> {
+  return createBatch({
+    clientId: data.clientId,
+    salesOrderId: data.salesOrderId,
+    salesOrderNumber: data.salesOrderNumber,
+    productId: data.productId,
+    sku: data.sku,
+    productName: data.productName,
+    targetQty: data.targetQty,
+    deliveryDate: data.deliveryDate ?? null,
+    priority: data.priority ?? null,
+    createdBy: data.createdBy ?? null,
+  });
+}
+
+/**
+ * Create a ManufacturingBatch pre-filled from a confirmed Sales Order,
+ * automatically populating material lines from the product's approved BOM.
+ * Freezes the BOM version + material requirements onto the batch.
+ * Returns null (and throws nothing) when no approved BOM exists — caller
+ * decides how to surface the missing-BOM condition.
+ */
+export async function createBatchFromApprovedBOM(data: {
+  clientId: string;
+  salesOrderId: string;
+  salesOrderNumber: string | null;
+  productId: string;
+  sku: string | null;
+  productName: string | null;
+  targetQty: number;
+  deliveryDate?: string | null;
+  priority?: "low" | "normal" | "high" | "urgent" | null;
+  createdBy?: string | null;
+}): Promise<{ batch: ManufacturingBatch | null; bom: BillOfMaterial | null; missingBom: boolean }> {
+  const Bom = await import("./bom.js");
+  const bom = await Bom.getApprovedByProduct(data.clientId, data.productId);
+  if (!bom) {
+    return { batch: null, bom: null, missingBom: true };
+  }
+  const bomLines: BOMLine[] = (bom.lines ?? []).map((l) => ({
+    productId: l.productId,
+    sku: l.sku ?? null,
+    productName: l.productName ?? null,
+    qtyPerUnit: l.qtyPerUnit,
+    unitOfMeasure: l.unitOfMeasure,
+    wastagePct: l.wastagePct,
+    size: l.size ?? null,
+    color: l.color ?? null,
+    category: l.category,
+  }));
+  const batch = await createBatch({
+    clientId: data.clientId,
+    salesOrderId: data.salesOrderId,
+    salesOrderNumber: data.salesOrderNumber,
+    productId: data.productId,
+    sku: data.sku,
+    productName: data.productName,
+    targetQty: data.targetQty,
+    deliveryDate: data.deliveryDate ?? null,
+    priority: data.priority ?? null,
+    createdBy: data.createdBy ?? null,
+    bom: bomLines,
+    bomVersion: bom.version,
+    bomApprovedAt: bom.approvedAt ?? null,
+  });
+  return { batch, bom, missingBom: false };
+}
+
+/**
+ * Recalculate manufacturing demand when a Sales Order is confirmed, amended,
+ * or cancelled. Does not delete historical batches or reverse posted stock.
+ * Returns the updated outstanding demand for affected products.
+ */
+export async function recalculateDemandOnSOChange(clientId: string, salesOrderId: string): Promise<OutstandingDemand[]> {
+  const so = await GoodsSO.get(salesOrderId);
+  if (!so || so.clientId !== clientId) return [];
+
+  const affectedProducts = new Set<string>();
+  for (const line of so.lines ?? []) {
+    if (line.productId) affectedProducts.add(line.productId);
+  }
+
+  const results: OutstandingDemand[] = [];
+  for (const pid of affectedProducts) {
+    results.push(await getOutstandingDemand(clientId, pid));
+  }
+  return results;
+}
+
+/**
+ * Auto-suggest batch creation for confirmed SO lines that still have outstanding
+ * demand and no existing non-terminal batch. Returns suggested batches (not created).
+ */
+export async function suggestBatchesForDemand(clientId: string): Promise<Array<{
+  salesOrderId: string;
+  soNumber: string | null;
+  productId: string;
+  sku: string | null;
+  productName: string | null;
+  suggestedQty: number;
+  expectedDeliveryDate: string | null;
+  reason: string;
+}>> {
+  const { items } = await db.queryByGSI1(clientId, {
+    entityType: "GoodsSalesOrder",
+    limit: 500,
+  });
+  const sos = (items as any[]).filter((so) => so.status === "confirmed");
+
+  const suggestions: Array<{
+    salesOrderId: string;
+    soNumber: string | null;
+    productId: string;
+    sku: string | null;
+    productName: string | null;
+    suggestedQty: number;
+    expectedDeliveryDate: string | null;
+    reason: string;
+  }> = [];
+
+  for (const so of sos) {
+    for (const line of so.lines ?? []) {
+      if (!line.productId) continue;
+      const demand = await getOutstandingDemand(clientId, line.productId);
+      // Find the portion of outstanding demand attributable to this SO.
+      const soOrder = demand.sourceOrders.find((o) => o.salesOrderId === so.id);
+      if (!soOrder) continue;
+
+      const soOutstanding = Math.max(0, soOrder.orderedQty - soOrder.dispatchedQty);
+      const existing = await findExistingBatchForDemand(clientId, so.id, line.productId);
+      if (existing) {
+        // Batch exists but may not cover full qty.
+        const existingAllocated = Number(existing.allocatedQty ?? 0);
+        const remaining = Math.max(0, soOutstanding - existingAllocated);
+        if (remaining > 0) {
+          suggestions.push({
+            salesOrderId: so.id,
+            soNumber: so.soNumber ?? null,
+            productId: line.productId,
+            sku: line.sku ?? null,
+            productName: line.name ?? null,
+            suggestedQty: remaining,
+            expectedDeliveryDate: so.expectedDeliveryDate ?? null,
+            reason: `Existing batch ${existing.batchNumber} covers part of SO ${so.soNumber}`,
+          });
+        }
+        continue;
+      }
+
+      if (soOutstanding > 0) {
+        suggestions.push({
+          salesOrderId: so.id,
+          soNumber: so.soNumber ?? null,
+          productId: line.productId,
+          sku: line.sku ?? null,
+          productName: line.name ?? null,
+          suggestedQty: soOutstanding,
+          expectedDeliveryDate: so.expectedDeliveryDate ?? null,
+          reason: `No batch for SO ${so.soNumber} — ${soOutstanding} unit(s) outstanding`,
+        });
+      }
+    }
+  }
+
+  return suggestions;
 }
 
 // ---------------------------------------------------------------------------
@@ -1249,8 +1822,8 @@ export async function listInspections(clientId: string, batchId?: string): Promi
 export async function createInspection(data: {
   clientId: string;
   batchId: string;
-  inspectedQty: number;
-  acceptedQty: number;
+  inspectedQty?: number;
+  acceptedQty?: number;
   rejectedQty?: number;
   reworkQty?: number;
   defectCategories?: string[];
@@ -1261,8 +1834,9 @@ export async function createInspection(data: {
 }): Promise<QualityInspection> {
   const b = await getBatch(data.batchId);
   if (!b || b.clientId !== data.clientId) throw Object.assign(new Error("Not found"), { statusCode: 404 });
-  const inspected = Number(data.inspectedQty);
-  const accepted = Number(data.acceptedQty);
+  // Default inspected/accepted to produced good output when not supplied (pre-fill from batch).
+  const inspected = Number((data.inspectedQty ?? b.producedGoodQty) || 0);
+  const accepted = Number((data.acceptedQty ?? b.producedGoodQty) || 0);
   const rejected = Number(data.rejectedQty ?? 0);
   const rework = Number(data.reworkQty ?? 0);
   if (!Number.isFinite(inspected) || inspected <= 0) throw new Error("inspectedQty must be > 0");
@@ -1308,6 +1882,33 @@ export async function createInspection(data: {
   };
   await db.putItem(item);
   return item;
+}
+
+/** Pre-fill inspection values from the batch's production output. */
+export async function prefillInspection(batchId: string, clientId: string): Promise<{
+  batchId: string;
+  batchNumber: string | null;
+  productName: string | null;
+  targetQty: number;
+  producedGoodQty: number;
+  rejectedQty: number;
+  reworkQty: number;
+  suggestedInspectedQty: number;
+  suggestedAcceptedQty: number;
+}> {
+  const b = await getBatch(batchId);
+  if (!b || b.clientId !== clientId) throw Object.assign(new Error("Not found"), { statusCode: 404 });
+  return {
+    batchId: b.id,
+    batchNumber: b.batchNumber ?? null,
+    productName: b.productName ?? null,
+    targetQty: Number(b.targetQty || 0),
+    producedGoodQty: Number(b.producedGoodQty || 0),
+    rejectedQty: Number(b.rejectedQty || 0),
+    reworkQty: Number(b.reworkQty || 0),
+    suggestedInspectedQty: Number(b.producedGoodQty || 0),
+    suggestedAcceptedQty: Number(b.producedGoodQty || 0),
+  };
 }
 
 /**
@@ -1384,6 +1985,71 @@ export async function decideInspection(data: {
       statusHistory: [...(b.statusHistory || []), { from: b.status, to: "rework" as BatchStatus, by: data.inspector, at: now, notes: data.remarks ?? null }],
       updatedAt: now,
     });
+  }
+
+  // Notify supervisor on hold or rework.
+  if (data.outcome === "hold" || data.outcome === "rework") {
+    try {
+      await writeEvent({
+        clientId: b.clientId,
+        name: data.outcome === "hold" ? "quality_hold_required" : "quality_rework_required",
+        docType: "manufacturing_batch",
+        docId: b.id,
+        docNumber: b.batchNumber,
+        actorId: data.inspector ?? null,
+        payload: {
+          batchNumber: b.batchNumber,
+          productName: b.productName,
+          outcome: data.outcome,
+          inspectedQty: item.inspectedQty,
+          acceptedQty: item.acceptedQty,
+          rejectedQty: item.rejectedQty,
+          reworkQty: item.reworkQty,
+          remarks: data.remarks,
+        },
+      });
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  // Flag unusual rejection rate vs historical average.
+  try {
+    const allInspections = await db.scanByType("QualityInspection", { limit: 5000 });
+    const prior = (allInspections as QualityInspection[])
+      .filter((i) => i.clientId === b.clientId && i.batchId !== item.id && i.outcome === "released")
+      .map((i) => {
+        const total = Number(i.inspectedQty || 0);
+        return total > 0 ? Number(i.rejectedQty || 0) / total : 0;
+      });
+    if (prior.length > 0) {
+      const avgRejectRate = prior.reduce((s, r) => s + r, 0) / prior.length;
+      const currentRejectRate = Number(item.inspectedQty || 0) > 0
+        ? Number(item.rejectedQty || 0) / Number(item.inspectedQty)
+        : 0;
+      if (currentRejectRate > avgRejectRate * 2 && currentRejectRate > 0.1) {
+        try {
+          await writeEvent({
+            clientId: b.clientId,
+            name: "quality_rejection_rate_high",
+            docType: "quality_inspection",
+            docId: item.id,
+            actorId: data.inspector ?? null,
+            payload: {
+              batchNumber: b.batchNumber,
+              currentRejectRate: Math.round(currentRejectRate * 100) / 100,
+              historicalAvgRejectRate: Math.round(avgRejectRate * 100) / 100,
+              rejectedQty: item.rejectedQty,
+              inspectedQty: item.inspectedQty,
+            },
+          });
+        } catch {
+          /* best-effort */
+        }
+      }
+    }
+  } catch {
+    /* best-effort */
   }
 
   await updateItem(item.pk, item.sk, {
@@ -1735,6 +2401,22 @@ export async function workflowOverview(clientId: string): Promise<{
   const now = Date.now();
   const soonMs = 7 * 24 * 3600 * 1000;
 
+  // Overdue confirmed sales orders (past expected delivery, not fully dispatched).
+  // Best-effort: if the trading module is unavailable, this stays 0.
+  let overdueSoCount = 0;
+  try {
+    const GSO = await import("./goods-sales-order.js");
+    const sos = await GSO.list(clientId);
+    for (const so of (sos as any[]) ?? []) {
+      if (so.status === "cancelled" || so.status === "draft") continue;
+      if (so.status === "fully_dispatched") continue;
+      if (!so.expectedDeliveryDate) continue;
+      if (new Date(so.expectedDeliveryDate).getTime() < now) overdueSoCount++;
+    }
+  } catch {
+    /* trading module unavailable — overdueSoCount stays 0 */
+  }
+
   // Material shortages: required (BOM × target) minus free stock, per batch.
   const reservations = await listReservations(clientId).catch(() => []);
   const reservedByProduct = new Map<string, number>();
@@ -1789,6 +2471,7 @@ export async function workflowOverview(clientId: string): Promise<{
     rejects: rejected,
     openIssues: openIssues.length,
     overdueIssues: overdueIssues.length,
+    overdueSoCount,
     heldPendingQty,
     awaitingReview,
     releasedStock,
@@ -1848,6 +2531,9 @@ export async function workflowOverview(clientId: string): Promise<{
   for (const i of overdueIssues) {
     attention.push({ severity: "critical", title: `Overdue issue: ${i.title}`, detail: `Line ${i.lineName ?? "—"} · batch ${i.affectedBatchNumber ?? "—"}`, batchId: i.affectedBatchId, batchNumber: i.affectedBatchNumber, link: { tab: "issues", filter: i.id } });
   }
+  if (overdueSoCount > 0) {
+    attention.push({ severity: "critical", title: `${overdueSoCount} sales order(s) past delivery date`, detail: "Confirm dispatch or reschedule delivery", batchId: null, batchNumber: null, link: { tab: "batches", filter: "overdue" } });
+  }
   for (const h of handoffs.filter((h) => h.status === "failed")) {
     attention.push({ severity: "critical", title: `${h.kind} handoff failed (${h.docNumber ?? h.docId})`, detail: h.lastError, batchId: h.batchId, batchNumber: null, link: { tab: "tally", filter: h.id } });
   }
@@ -1886,4 +2572,235 @@ export async function workflowOverview(clientId: string): Promise<{
     activity: activity.slice(0, 50),
     generatedAt: new Date().toISOString(),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Production Progress Automation (Stage 5)
+// ---------------------------------------------------------------------------
+
+/** Default stall threshold: 24 hours without a production update. */
+export const DEFAULT_STALL_THRESHOLD_HOURS = 24;
+
+/** Find batches stuck in in_progress with no recent production update. */
+export async function getStalledBatches(
+  clientId: string,
+  thresholdHours: number = DEFAULT_STALL_THRESHOLD_HOURS,
+): Promise<Array<{
+  batchId: string;
+  batchNumber: string;
+  productName: string | null;
+  status: string;
+  materialStatus: string;
+  qualityStatus: string;
+  producedGoodQty: number;
+  targetQty: number;
+  lastUpdateAt: string | null;
+  hoursSinceUpdate: number;
+  deliveryDate: string | null;
+}>> {
+  const batches = await listBatches(clientId);
+  const updates = await db.scanByType("ProductionUpdate", { limit: 5000 });
+  const lastUpdateByBatch = new Map<string, string>();
+  for (const u of (updates as any[]) ?? []) {
+    const prev = lastUpdateByBatch.get(u.batchId);
+    if (!prev || u.createdAt > prev) lastUpdateByBatch.set(u.batchId, u.createdAt);
+  }
+
+  const now = Date.now();
+  const thresholdMs = thresholdHours * 3600 * 1000;
+  const stalled: Array<{
+    batchId: string;
+    batchNumber: string;
+    productName: string | null;
+    status: string;
+    materialStatus: string;
+    qualityStatus: string;
+    producedGoodQty: number;
+    targetQty: number;
+    lastUpdateAt: string | null;
+    hoursSinceUpdate: number;
+    deliveryDate: string | null;
+  }> = [];
+
+  for (const b of batches) {
+    if (b.status !== "in_progress") continue;
+    const lastUpdate = lastUpdateByBatch.get(b.id);
+    if (!lastUpdate) continue; // No updates at all — not "stalled", just not started
+    const hoursSince = (now - new Date(lastUpdate).getTime()) / (1000 * 3600);
+    if (hoursSince > thresholdHours) {
+      stalled.push({
+        batchId: b.id,
+        batchNumber: b.batchNumber,
+        productName: b.productName ?? null,
+        status: b.status,
+        materialStatus: b.materialStatus,
+        qualityStatus: b.qualityStatus,
+        producedGoodQty: Number(b.producedGoodQty || 0),
+        targetQty: Number(b.targetQty || 0),
+        lastUpdateAt: lastUpdate,
+        hoursSinceUpdate: Math.round(hoursSince * 10) / 10,
+        deliveryDate: b.deliveryDate ?? null,
+      });
+    }
+  }
+
+  stalled.sort((a, b) => b.hoursSinceUpdate - a.hoursSinceUpdate);
+  return stalled;
+}
+
+/** Detect production interruptions from the latest update of each in-progress batch. */
+export async function getProductionInterruptions(clientId: string): Promise<Array<{
+  batchId: string;
+  batchNumber: string;
+  lineStatus: string;
+  machineStatus: string | null;
+  staffingStatus: string | null;
+  utilityStatus: string | null;
+  lastUpdateAt: string | null;
+}>> {
+  const batches = await listBatches(clientId);
+  const updates = await db.scanByType("ProductionUpdate", { limit: 5000 });
+  const lastUpdateByBatch = new Map<string, any>();
+  for (const u of (updates as any[]) ?? []) {
+    const prev = lastUpdateByBatch.get(u.batchId);
+    if (!prev || u.createdAt > prev) lastUpdateByBatch.set(u.batchId, u);
+  }
+
+  const interruptions: Array<{
+    batchId: string;
+    batchNumber: string;
+    lineStatus: string;
+    machineStatus: string | null;
+    staffingStatus: string | null;
+    utilityStatus: string | null;
+    lastUpdateAt: string | null;
+  }> = [];
+
+  for (const b of batches) {
+    if (b.status !== "in_progress") continue;
+    const last = lastUpdateByBatch.get(b.id);
+    if (!last) continue;
+    if (last.lineStatus === "stopped" || last.lineStatus === "maintenance") {
+      interruptions.push({
+        batchId: b.id,
+        batchNumber: b.batchNumber,
+        lineStatus: last.lineStatus,
+        machineStatus: last.machineStatus ?? null,
+        staffingStatus: last.staffingStatus ?? null,
+        utilityStatus: last.utilityStatus ?? null,
+        lastUpdateAt: last.createdAt,
+      });
+    }
+  }
+
+  return interruptions;
+}
+
+// ---------------------------------------------------------------------------
+// Finished Stock Allocation Automation (Stage 7)
+// ---------------------------------------------------------------------------
+
+export interface AllocationSuggestion {
+  batchId: string;
+  batchNumber: string;
+  productId: string;
+  sku: string | null;
+  productName: string | null;
+  availableQty: number;
+  salesOrderId: string;
+  soNumber: string | null;
+  customerName: string | null;
+  outstandingQty: number;
+  suggestedQty: number;
+  expectedDeliveryDate: string | null;
+  priority: string | null;
+  reason: string;
+}
+
+/** Suggest allocations of released stock to confirmed Sales Orders with outstanding demand. */
+export async function suggestAllocations(clientId: string): Promise<AllocationSuggestion[]> {
+  const batches = await listBatches(clientId);
+  const { items } = await db.queryByGSI1(clientId, {
+    entityType: "GoodsSalesOrder",
+    limit: 500,
+  });
+  const confirmedSOs = (items as any[]).filter(
+    (so) => so.status === "confirmed" && Array.isArray(so.lines),
+  );
+
+  // Build outstanding demand per SO + product.
+  const soOutstanding: Map<string, Map<string, { ordered: number; dispatched: number; expectedDeliveryDate: string | null }>> = new Map();
+  for (const so of confirmedSOs) {
+    const productMap = new Map<string, { ordered: number; dispatched: number; expectedDeliveryDate: string | null }>();
+    for (const line of so.lines as any[]) {
+      if (!line.productId) continue;
+      const prev = productMap.get(line.productId) || { ordered: 0, dispatched: 0, expectedDeliveryDate: so.expectedDeliveryDate ?? null };
+      prev.ordered += Number(line.orderedQty || 0);
+      prev.dispatched += Number(line.dispatchedQty || 0);
+      productMap.set(line.productId, prev);
+    }
+    soOutstanding.set(so.id, productMap);
+  }
+
+  // Track allocations already made per batch + SO to prevent duplicates.
+  const allocations: Array<{ batchId: string; soId: string; productId: string; qty: number }> = [];
+  for (const b of batches) {
+    if (!b.salesOrderId) continue;
+    const soMap = soOutstanding.get(b.salesOrderId);
+    if (!soMap) continue;
+    const soProduct = soMap.get(b.productId || "");
+    if (!soProduct) continue;
+    allocations.push({
+      batchId: b.id,
+      soId: b.salesOrderId,
+      productId: b.productId!,
+      qty: Number(b.allocatedQty || 0),
+    });
+  }
+
+  const suggestions: AllocationSuggestion[] = [];
+  for (const b of batches) {
+    if (b.qualityStatus !== "Released") continue;
+    const available = Math.max(0, Number(b.releasedQty || 0) - Number(b.allocatedQty || 0));
+    if (available <= 0 || !b.salesOrderId || !b.productId) continue;
+
+    const soMap = soOutstanding.get(b.salesOrderId);
+    if (!soMap) continue;
+    const soProduct = soMap.get(b.productId);
+    if (!soProduct) continue;
+
+    const alreadyAllocated = allocations
+      .filter((a) => a.batchId === b.id && a.soId === b.salesOrderId && a.productId === b.productId)
+      .reduce((s, a) => s + a.qty, 0);
+
+    const outstanding = Math.max(0, soProduct.ordered - soProduct.dispatched - alreadyAllocated);
+    if (outstanding <= 0) continue;
+
+    const suggestedQty = Math.min(available, outstanding);
+    suggestions.push({
+      batchId: b.id,
+      batchNumber: b.batchNumber,
+      productId: b.productId,
+      sku: b.sku ?? null,
+      productName: b.productName ?? null,
+      availableQty: available,
+      salesOrderId: b.salesOrderId,
+      soNumber: b.salesOrderNumber ?? null,
+      customerName: null,
+      outstandingQty: outstanding,
+      suggestedQty,
+      expectedDeliveryDate: soProduct.expectedDeliveryDate,
+      priority: null,
+      reason: `Allocate ${suggestedQty} of ${available} available units to SO ${b.salesOrderNumber ?? b.salesOrderId}`,
+    });
+  }
+
+  // Sort by expected delivery date (soonest first).
+  suggestions.sort((a, b) => {
+    const da = a.expectedDeliveryDate ? new Date(a.expectedDeliveryDate).getTime() : Infinity;
+    const db = b.expectedDeliveryDate ? new Date(b.expectedDeliveryDate).getTime() : Infinity;
+    return da - db;
+  });
+
+  return suggestions;
 }

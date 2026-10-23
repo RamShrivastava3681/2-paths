@@ -246,6 +246,96 @@ export function recomputeStatus(
   return po.manualStatus || po.status || "sent";
 }
 
+// ---------------------------------------------------------------------------
+// PO → GRN Automation helpers
+// ---------------------------------------------------------------------------
+
+/** Outstanding purchase quantity for a PO line: ordered − received. */
+export function lineOutstandingQty(line: GoodsPOLine): number {
+  return Math.max(0, Number(line.orderedQty ?? 0) - Number(line.receivedQty ?? 0));
+}
+
+/** Outstanding purchase quantity across all lines of a PO. */
+export function poOutstandingQty(po: GoodsPurchaseOrder): number {
+  return (po.lines ?? []).reduce((s, l) => s + lineOutstandingQty(l), 0);
+}
+
+/** Check if a PO is overdue (past expectedDeliveryDate and not fully received). */
+export function isPOOverdue(po: GoodsPurchaseOrder): boolean {
+  if (!po.expectedDeliveryDate) return false;
+  if (po.status === "fully_received" || po.status === "cancelled") return false;
+  return new Date(po.expectedDeliveryDate).getTime() < Date.now();
+}
+
+/** Get all POs with outstanding quantities for a given product, sorted by expected delivery date. */
+export async function getOutstandingPOsForProduct(clientId: string, productId: string): Promise<Array<{
+  poId: string;
+  poNumber: string | null;
+  supplierId: string | null;
+  supplierName: string | null;
+  warehouse: string | null;
+  productId: string;
+  sku: string | null;
+  orderedQty: number;
+  receivedQty: number;
+  outstandingQty: number;
+  expectedDeliveryDate: string | null;
+  isOverdue: boolean;
+  status: string;
+}>> {
+  const pos = await list(clientId);
+  const result: Array<{
+    poId: string;
+    poNumber: string | null;
+    supplierId: string | null;
+    supplierName: string | null;
+    warehouse: string | null;
+    productId: string;
+    sku: string | null;
+    orderedQty: number;
+    receivedQty: number;
+    outstandingQty: number;
+    expectedDeliveryDate: string | null;
+    isOverdue: boolean;
+    status: string;
+  }> = [];
+
+  for (const po of pos) {
+    if (po.status === "cancelled" || po.status === "fully_received") continue;
+    for (const line of po.lines ?? []) {
+      if (line.productId !== productId) continue;
+      const outstanding = lineOutstandingQty(line);
+      if (outstanding <= 0) continue;
+      result.push({
+        poId: po.id,
+        poNumber: po.poNumber ?? null,
+        supplierId: po.supplierId ?? null,
+        supplierName: po.supplierName ?? null,
+        warehouse: po.warehouse ?? null,
+        productId: line.productId,
+        sku: line.sku ?? null,
+        orderedQty: Number(line.orderedQty ?? 0),
+        receivedQty: Number(line.receivedQty ?? 0),
+        outstandingQty: outstanding,
+        expectedDeliveryDate: po.expectedDeliveryDate ?? null,
+        isOverdue: isPOOverdue(po),
+        status: po.status,
+      });
+    }
+  }
+
+  // Sort by expected delivery date (soonest first)
+  result.sort((a, b) => {
+    const da = a.expectedDeliveryDate ? new Date(a.expectedDeliveryDate).getTime() : Infinity;
+    const db = b.expectedDeliveryDate ? new Date(b.expectedDeliveryDate).getTime() : Infinity;
+    return da - db;
+  });
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+
 export async function list(clientId?: string) {
   if (clientId) {
     const { items } = await db.queryByGSI1(clientId, {
